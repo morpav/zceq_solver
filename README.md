@@ -17,7 +17,8 @@ Current performance of the solver is ~7 solutions/s on Intel(R)
 Core(TM) i5-4670K CPU @ 3.40GHz, which translates to roughly 270ms
 and average of 1.88 solutions for algorithm iteration (one nonce).
 
-(For **binary builds**, please go to https://github.com/morpav/zceq_solver).
+(For **binary builds**, please go to
+https://github.com/morpav/zceq_solver--bin).
 
 (Document in progres..)
 
