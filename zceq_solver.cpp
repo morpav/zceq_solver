@@ -264,7 +264,8 @@ bool ReductionStep<C,S>::Execute(Context* context,
       auto ProcessOneRow = [&]() {
         auto idx = Const::kHashTableMask &
                    (in_rows[i].GetRawHash() >> Const::kBucketCountBits);
-        hash[i] = idx;
+        if (InString::segments_reduced < Const::kUseTemporaryHashArrayBeforeStep)
+          hash[i] = idx;
         count[idx]++;
         if (!C::isFinal && !Const::kStoreIndicesEarly)
           OutputIndex(&pair_index[i], in_rows[i].GetLink());
@@ -320,8 +321,11 @@ bool ReductionStep<C,S>::Execute(Context* context,
     for (u32 inner_partition : range(Const::kPartitionCount)) {
       int actual_items = in_buckets->partition_sizes[in_bucket][inner_partition];
       auto FillOneItem = [&]() {
-        //       const auto idx = Const::kHashTableMask & (in_rows[i].GetHash() >> Const::kBucketCountBits);
-        auto idx = hash[i];
+        u16 idx;
+        if (InString::segments_reduced < Const::kUseTemporaryHashArrayBeforeStep)
+          idx = hash[i];
+        else
+          idx = Const::kHashTableMask & (in_rows[i].GetRawHash() >> Const::kBucketCountBits);
         // Use branch-less version of code. We always rewrite collisions[0]
         // when the i-th string is not part of any valid collision
         // (lookup[hash[i]] == 0). But the collisions[0] is therefore always hot

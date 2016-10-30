@@ -37,6 +37,7 @@ struct Const {
   // Do not change it.
   static constexpr bool kStoreIndicesEarly = false;
   static constexpr bool kUseNonTemporalStoresForIndices = true;
+  static constexpr u32 kUseTemporaryHashArrayBeforeStep = 8;
   static constexpr u64 kXStringAlignment = 4ul;
   static constexpr u64 kXORAlignment = 4ul;
   static constexpr u64 kExtraSpaceMultiplier = 7;
