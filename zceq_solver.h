@@ -352,6 +352,11 @@ class ReductionStep {
 
   bool PrepareRTConfiguration();
   bool Execute(Context* context, BucketIndices* input_buckets, BucketIndices* output_buckets) noexcept;
+  inline void OutputString(const InString* first, const InString* second,
+                           u16 first_index, u16 second_index,
+                           u32* counter, u32 in_bucket);
+  inline void GenerateSolution(const InString* first, const InString* second,
+                               u16 first_index, u16 second_index, u32* counter);
 
  protected:
   void OutputIndex(PairLink* target, PairLink);
@@ -363,6 +368,7 @@ class ReductionStep {
   OutString* out_strings_ = nullptr;
   PairLink* target_pair_index_ = nullptr;
 
+  u64 last_final_segment = (u64)-1ll;
   std::vector<u32> collisions_;
 };
 
