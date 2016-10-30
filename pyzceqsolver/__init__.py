@@ -83,7 +83,7 @@ class Solver:
 
     def get_solution(self, num):
         assert(num >= 0 and num < 16)
-        return str(ffi.buffer(self.solutions_[num].data))
+        return bytes(ffi.buffer(self.solutions_[num].data))
 
     def validate_solution(self, block_header, solution):
         assert len(block_header) == 140
