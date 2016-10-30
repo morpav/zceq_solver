@@ -83,7 +83,6 @@ class PairLink {
     auto bucket = (u32)(partition << (32u - Const::kBucketInIndexShift) |
                         data_ >> Const::kBucketInIndexShift);
 
-
     auto result = Translated{
         u32(Const::kItemsInBucket * bucket + smaller),
         u32(Const::kItemsInBucket * bucket + larger)
@@ -206,8 +205,25 @@ class alignas(Const::kXStringAlignment) XString {
   friend class XString;
 };
 
-class NotUsed { NotUsed() = delete;
- public:
+// Last "string" with all segments reduced, holding only a solution candidate.
+// It must conform to a part of XString interface to allow generic code to
+// compile (but the objects are never used as strings in runtime).
+struct SolutionCandidate {
+  // The string has all segments reduced.
+  static constexpr u32 segments_reduced = Const::kTotalSegmentsCount;
+  static constexpr u32 hash_length = 0;
+  static constexpr bool has_expanded_hash = Const::kExpandHashes;
+  inline u8* GetRawData(u32 segment) {
+    return nullptr;
+  }
+  inline void SetLink(PairLink link) {
+    link1 = link;
+  }
+
+  PairLink link1;
+  PairLink link2;
+  u16 link1_position_mod_bucket_size;
+  u16 link2_position_mod_bucket_size;
 };
 
 template<u32 step_no>
@@ -221,7 +237,11 @@ struct ReductionStepConfig {
 template<u32 step_no>
 struct FinalStepConfig : ReductionStepConfig<step_no> {
   static_assert(step_no == 8, "");
-  using OutString = XString<step_no + 2, Const::kExpandHashes>;
+  // We need to select XString of such size that it is big enough to contain
+  // SolutionCandidate object. The string is never used directly as a string
+  // but we need the space.
+  using OutString = XString<8, Const::kExpandHashes>;
+  static_assert(sizeof(SolutionCandidate) <= sizeof(OutString), "");
   static constexpr bool isFinal = true;
 };
 
@@ -235,6 +255,10 @@ struct BucketIndices {
       counter[i] = (i * Const::kItemsInBucket);
     }
     memset(partition_sizes, 0, sizeof partition_sizes);
+  }
+
+  void ResetForFinal() {
+    counter[0] = 0;
   }
 
   u32 CountUsedPositions() {

@@ -37,6 +37,7 @@ struct Const {
   // Do not change it.
   static constexpr bool kStoreIndicesEarly = false;
   static constexpr bool kUseNonTemporalStoresForIndices = true;
+  static constexpr bool kProcessSolutionCandidateEarly = false;
   static constexpr u32 kUseTemporaryHashArrayBeforeStep = 8;
   static constexpr u64 kXStringAlignment = 4ul;
   static constexpr u64 kXORAlignment = 4ul;
@@ -84,6 +85,7 @@ struct Const {
   static constexpr u64 kMaximumStringSetSize =
       kInitialStringSetSize * kExtraSpaceMultiplier / kExtraSpaceDivisor;
 
+  static_assert(kItemsInBucket <= 0xffff, "Items in bucket cannot fit into u16");
   static_assert(kPartitionCountBits < 32, "Expression overflowed");
   static_assert(kItemsInOutPartition * kPartitionCount <= kItemsInBucket, "");
   static_assert(

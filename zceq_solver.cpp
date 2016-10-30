@@ -235,7 +235,13 @@ bool ReductionStep<C,S>::Execute(Context* context,
   auto cum_sum = context->cum_sum.data();
   auto collisions = context->collisions.data();
 
-  out_buckets->Reset();
+  if (C::isFinal)
+    // In the last step, we don't have to reset all parts of output buckets,
+    // because only one bucket is used for solution candidates.
+    out_buckets->ResetForFinal();
+  else
+    // Otherwise, all buckets must be properly cleared.
+    out_buckets->Reset();
 
   if (Const::kCheckLinksConsistency)
     memset(target_pair_index_, 0xff, Const::kMaximumStringSetSize * sizeof *target_pair_index_);
@@ -267,6 +273,10 @@ bool ReductionStep<C,S>::Execute(Context* context,
         if (InString::segments_reduced < Const::kUseTemporaryHashArrayBeforeStep)
           hash[i] = idx;
         count[idx]++;
+        // We don't have to store the last index, because the source strings will
+        // not be destroyed when we find a collision. So we can read the links
+        // directly from the strings (We have to read the strings anyway so other
+        // memory lookups would be a plain overhead).
         if (!C::isFinal && !Const::kStoreIndicesEarly)
           OutputIndex(&pair_index[i], in_rows[i].GetLink());
         i++;
@@ -354,8 +364,8 @@ bool ReductionStep<C,S>::Execute(Context* context,
     auto OutputString = [&](const InString* first, const InString* second,
                             u16 first_index, u16 second_index) {
       static_assert((OutString::segments_reduced == InString::segments_reduced + 1) ||
-                    (OutString::segments_reduced == InString::segments_reduced + 2),
-                    "Invalid string generation");
+                    // We allow and exception in case of the final step
+                    C::isFinal, "Invalid string generation");
       static_assert(InString::has_expanded_hash == OutString::has_expanded_hash,"");
       constexpr auto out_segments_reduced = OutString::segments_reduced;
       auto out_hash_xor = first->GetSecondRawHash() ^ second->GetSecondRawHash();
@@ -412,19 +422,22 @@ bool ReductionStep<C,S>::Execute(Context* context,
             return;
           last_final_segment = first_final_csegment;
         }
-//        // Put everything to the first bucket
-//        const auto out_index = out_buckets->counter[0]++;
-//        OutString& result = out_strings_[out_index];
-//
-//        assert(first_index < second_index);
-//        auto link = PairLink{second_index, first_index, in_bucket};
-//        assert(link.Validate(out_index));
-//        result.SetLink(link);
-
-        solver_.ProcessSolutionCandidate(first->GetLink(), first_index,
-                                         second->GetLink(), second_index);
-        // out_strings_[first_index].SetLink(first->GetLink());
-        // printf("Solution/collision at %ld \n", first->GetFinalCollisionSegment());
+        if (Const::kProcessSolutionCandidateEarly) {
+          solver_.ProcessSolutionCandidate(first->GetLink(), first_index,
+                                           second->GetLink(), second_index);
+        } else {
+          // Put a solution candidate object into the first bucket, always.
+          // There is no need for further separation since all needed information
+          // is stored directly in the instances (full links with positions within
+          // source buckets).
+          const auto out_index = out_buckets->counter[0]++;
+          auto& result = *(SolutionCandidate*)&out_strings_[out_index];
+          result.link1 = first->GetLink();
+          result.link2 = second->GetLink();
+          // We know for sure that we fit into u16, we check in statically in config file.
+          result.link1_position_mod_bucket_size = (u16)(first_index % Const::kItemsInBucket);
+          result.link2_position_mod_bucket_size = (u16)(second_index % Const::kItemsInBucket);
+        }
       }
     };
 
@@ -670,7 +683,31 @@ i32 Solver::Run() {
     return 0;
   }
 
-  ReportStep(nullptr, true);
+  // Handle solution candidates created in step8, if they were not already
+  // processed during the step itself. Both options are possible based
+  // on given configuration.
+  if (!Const::kProcessSolutionCandidateEarly) {
+    auto candidates = step8.out_strings->As<typename Step8::OutString>();
+    auto candidates_count = buckets2.counter[0];
+
+    for (auto i : range(candidates_count)) {
+      // We need to cast here because in general Step8::OutString can be a bigger
+      // type then SolutionCandidate.
+      auto& candidate = *(SolutionCandidate*)&candidates[i];
+      auto l1 = candidate.link1.Translate(candidate.link1_position_mod_bucket_size);
+      auto l2 = candidate.link2.Translate(candidate.link2_position_mod_bucket_size);
+      // Most of the duplicates is introduced in the last step. Check this case
+      // eagerly here, it really pays off.
+      if (l1.first == l2.first || l1.second == l2.second ||
+          l1.first == l2.second || l1.second == l2.first) {
+        continue;
+      }
+      ProcessSolutionCandidate(candidate.link1, candidate.link1_position_mod_bucket_size,
+                               candidate.link2, candidate.link2_position_mod_bucket_size);
+    }
+  }
+
+  ReportStep("Processed solutions", true);
   return valid_solutions_;
 }
 
@@ -736,6 +773,16 @@ bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
   auto& temporary = temporary_solution_;
   auto solution_size = 2 * (1u << link_level);
 
+  // Check the most common duplicates early.
+  auto l1 = l8_link1.Translate(link1_position);
+  auto l2 = l8_link2.Translate(link2_position);
+  // We know that by design, first and second indices from the same pair link
+  // cannot be the same. So only the other 4 cases must be checked.
+  if (l1.first == l2.first || l1.second == l2.second ||
+      l1.first == l2.second || l1.second == l2.first) {
+    return false;
+  }
+
   result.clear();
   result.reserve(solution_size);
   temporary.clear();
@@ -750,9 +797,6 @@ bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
 
   auto source = &result;
   auto target = &temporary;
-
-  auto l1 = l8_link1.Translate(link1_position);
-  auto l2 = l8_link2.Translate(link2_position);
 
   source->push_back(l1.first);
   source->push_back(l1.second);
