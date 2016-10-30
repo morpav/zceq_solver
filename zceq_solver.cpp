@@ -145,7 +145,6 @@ void Solver::GenerateXStrings(
     blake.FinalizeInto(blake_result, g);
 
     auto bucket = ComputeBucketFromHash(blake_result.hash);
-//    auto position = bucket * Const::kItemsInBucket + buckets->counter[bucket]++;
     auto position = buckets->counter[bucket]++;
     auto row = &output[position];
     row->SetIndex(string_index++);
@@ -155,7 +154,6 @@ void Solver::GenerateXStrings(
       ExpandArrayFast(blake_result.hash, row->GetRawData(0));
 
     bucket = ComputeBucketFromHash(blake_result.hash + half_hash_length);
-//    position = bucket * Const::kItemsInBucket + buckets->counter[bucket]++;
     position = buckets->counter[bucket]++;
     row = &output[position];
     row->SetIndex(string_index++);
@@ -215,12 +213,8 @@ bool ReductionStep<C,T>::PrepareRTConfiguration() {
   auto space = solver_.link_indices_[segments_reduced];
   target_pair_index_ = space->template As<PairLink>();
 
-  // Set default limit
-  out_strings_limit = (u32)solver_.template AvailableStringSlots<OutString>();
-
   in_strings_ = in_strings->As<InString>();
   out_strings_ = out_strings->As<OutString>();
-  reordered_temp_strings_ = out_strings->As<InString>();
   return true;
 };
 
@@ -228,7 +222,6 @@ template<typename C, typename S>
 bool ReductionStep<C,S>::Execute(Context* context,
                                  BucketIndices* in_buckets,
                                  BucketIndices* out_buckets) noexcept {
-  //solver_.allocator().DumpState();
   PrepareRTConfiguration();
 
   if (Const::kReportCollisions) {
@@ -247,9 +240,13 @@ bool ReductionStep<C,S>::Execute(Context* context,
   if (Const::kCheckLinksConsistency)
     memset(target_pair_index_, 0xff, Const::kMaximumStringSetSize * sizeof *target_pair_index_);
 
-//for (auto bucket : range(Const::kBucketCount)) {{
+  // Iterate over outer all buckets but keep track when outer partition
+  // changes.
+  // The goal is twofold: Compute histogram of part of values of the first segments
+  // which are not determined by a bucket number. Second, we need to copy
   for (u32 outer_partition : range(Const::kPartitionCount)) {
   for (u32 _bucket : range(Const::kBucketsPerPartition)) {
+
     const auto in_bucket = _bucket + outer_partition * Const::kBucketsPerPartition;
     auto base_index = in_bucket * Const::kItemsInBucket;
     const InString* const in_rows = &in_strings_[base_index];
@@ -340,13 +337,8 @@ bool ReductionStep<C,S>::Execute(Context* context,
         FillOneItem();
         FillOneItem();
         FillOneItem();
-        //    while (i < (actual_items / 4 * 4)) {
-        //    for (auto i : range(actual_items)) {
-        //       const auto idx = Const::kHashTableMask & (in_rows[i].GetHash() >> Const::kBucketCountBits);
       }
-      //    cnt = 0;
       cnt = actual_items % 4;
-      //    while (cnt < (actual_items % 8)) {
       while (LIKELY(cnt--)) {
         FillOneItem();
       }
@@ -364,12 +356,6 @@ bool ReductionStep<C,S>::Execute(Context* context,
       constexpr auto out_segments_reduced = OutString::segments_reduced;
       auto out_hash_xor = first->GetSecondRawHash() ^ second->GetSecondRawHash();
       const auto out_bucket = out_hash_xor & Const::kBucketNumberMask;
-//      auto& counter = out_buckets->counter[out_bucket];
-//      const auto out_index = counter + Const::kItemsInBucket * out_bucket;
-//      counter += int(counter < Const::kItemsInBucket - 20);
-
-//      auto counter = out_buckets->counter[out_bucket]++;
-//      const auto out_index = counter + Const::kItemsInBucket * out_bucket;
 
       if (Const::kCheckBucketOverflow)
         if (UNLIKELY(out_buckets->counter[out_bucket]
@@ -393,7 +379,6 @@ bool ReductionStep<C,S>::Execute(Context* context,
           (OutString::hash_length + Const::kXORAlignment - 1) / Const::kXORAlignment * Const::kXORAlignment);
 
       if (Const::kFilterZeroQWordStrings)
-//      if (result.GetCleanSegment(out_segments_reduced) == 0 && result.GetCleanSegment(out_segments_reduced + 1) == 0) {
         if (*(u64*)xor_result == 0) {
           out_buckets->counter[out_bucket]--;
           return;
@@ -401,7 +386,7 @@ bool ReductionStep<C,S>::Execute(Context* context,
 
       assert(first_index < second_index);
       auto link = PairLink{second_index, first_index, in_bucket};
-      if (!C::isFinal && Const::kStoreIndicesEarly)
+      if (Const::kStoreIndicesEarly)
         OutputIndex(&target_pair_index_[out_index], link);
       assert(link.Validate(out_index));
       result.SetLink(link);
@@ -439,11 +424,7 @@ bool ReductionStep<C,S>::Execute(Context* context,
       }
     };
 
-#define PREFETCH(...) if (Const::kPrefetchDistance > 0) __builtin_prefetch(__VA_ARGS__)
-// #define PREFETCH(...)
-
 #define ProduceOutput(...) (C::isFinal ? GenerateSolution(__VA_ARGS__) : OutputString(__VA_ARGS__))
-// #define ProduceOutput OutputString
 
     for (auto i : range(Const::kHashTableSize)) {
       if (!cum_sum[i]) {
@@ -453,6 +434,10 @@ bool ReductionStep<C,S>::Execute(Context* context,
       auto cnt = count[i];
       u16* prefetch_ptr = cg_indices + Const::kPrefetchDistance;
 
+      // Implement the most probable cases (collision group size <= 4) unrolled.
+      // If the group size is larger, handle only the long cycles in 'default'
+      // branch and then follow by unrolled implementation. We aware that unrolling
+      // too can hurt the performance.
       switch (cnt) {
         default: {
           collision_group[0] = in_rows + cg_indices[0];
@@ -461,26 +446,27 @@ bool ReductionStep<C,S>::Execute(Context* context,
           collision_group[3] = in_rows + cg_indices[3];
           for (auto ii = 4; ii < cnt; ii++) {
             collision_group[ii] = in_rows + cg_indices[ii];
-            // PREFETCH(in_rows + cg_indices[ii + prefetch_distance]);
-            PREFETCH(in_rows + *prefetch_ptr++);
-            // for (auto ii2 = ii+1; ii2 < cnt; ii2++) {
+            if (Const::kPrefetchDistance > 0)
+              __builtin_prefetch(in_rows + *prefetch_ptr++);
             for (auto ii2 = 0; ii2 < ii; ii2++) {
-              //volatile auto keep = 0;
               ProduceOutput(collision_group[ii2], collision_group[ii], cg_indices[ii2], cg_indices[ii]);
             }
           }
         }
         case 4:
-          PREFETCH(in_rows + *prefetch_ptr++);
+          if (Const::kPrefetchDistance > 0)
+            __builtin_prefetch(in_rows + *prefetch_ptr++);
           ProduceOutput(in_rows + cg_indices[0], in_rows + cg_indices[3], cg_indices[0], cg_indices[3]);
           ProduceOutput(in_rows + cg_indices[1], in_rows + cg_indices[3], cg_indices[1], cg_indices[3]);
           ProduceOutput(in_rows + cg_indices[2], in_rows + cg_indices[3], cg_indices[2], cg_indices[3]);
         case 3:
-          PREFETCH(in_rows + *prefetch_ptr++);
+          if (Const::kPrefetchDistance > 0)
+            __builtin_prefetch(in_rows + *prefetch_ptr++);
           ProduceOutput(in_rows + cg_indices[0], in_rows + cg_indices[2], cg_indices[0], cg_indices[2]);
           ProduceOutput(in_rows + cg_indices[1], in_rows + cg_indices[2], cg_indices[1], cg_indices[2]);
         case 2:
-          PREFETCH(in_rows + *prefetch_ptr++);
+          if (Const::kPrefetchDistance > 0)
+            __builtin_prefetch(in_rows + *prefetch_ptr++);
           ProduceOutput(in_rows + cg_indices[0], in_rows + cg_indices[1], cg_indices[0], cg_indices[1]);
         case 1:
         case 0:
@@ -489,24 +475,16 @@ bool ReductionStep<C,S>::Execute(Context* context,
     }
     out_buckets->CheckCounters();
     }
-    out_buckets->ClosePartition(outer_partition);
+    // The last step doesn't produce proper partitions, so don't touch it.
+    // TODO: This should be extracted into separate step.
+    if (!C::isFinal)
+      out_buckets->ClosePartition(outer_partition);
   }
 
-  // for (auto i : range(Const::kMaximumStringSetSize))
-/*
-    for (auto i : range(input_size)) {
-      _mm_stream_si32((int*) &link_index[i], out_strings_[i].GetHash());
-      // link_index[i] = out_strings_[i].GetHash();
-    }
-*/
   solver_.ReportStep("Performed reduction step");
   if (Const::kReportCollisions)
     ReportCollisionStructure(collisions_, in_buckets->CountUsedPositions());
 
-  if (Const::kReportSteps) {
-    // auto out_strings = out_buckets->CountUsedPositions();
-    // printf("Generated %d out strings\n", out_strings);
-  }
   return true;
 }
 
@@ -516,34 +494,6 @@ void inline ReductionStep<C,S>::OutputIndex(PairLink* target, PairLink link) {
     target->copy_nt(link);
   else
     *target = link;
-}
-
-void Solver::ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
-                                      PairLink l8_link2, u32 link2_position) {
-  // Make space for a new solution.
-  if (solution_objects_.size() < valid_solutions_ + 1)
-    solution_objects_.emplace_back(512);
-
-  auto& solution = solution_objects_[valid_solutions_];
-  auto success = ExtractSolution(l8_link1, link1_position,
-                                 l8_link2, link2_position,
-                                 solution, 8);
-  if (!success) {
-    invalid_solutions_++;
-    return;
-  }
-
-  if (Const::kRecomputeSolution) {
-    if (!RecomputeSolution(solution, 8, false)) {
-      fprintf(stderr,
-              "********** FATAL ERROR: Invalid solution!! **********\n");
-      invalid_solutions_++;
-      return;
-    }
-  }
-  // Reorder the solution if it is valid
-  ReorderSolution(solution);
-  valid_solutions_++;
 }
 
 void Solver::ValidatePartialSolution(u32 level, PairLink link1,
@@ -561,9 +511,7 @@ void Solver::ValidatePartialSolution(u32 level, PairLink link1,
       return;
     }
   }
-  // We don't care about swaps
-  // auto swaps = ReorderSolution(solution);
-
+  // We don't care about swaps here since we don't try to produce a final solution.
   if (!RecomputeSolution(solution, level, false)) {
     fprintf(stderr, "********** FATAL ERROR: Invalid PARTIAL solution!! **********\n");
     assert(false);
@@ -749,6 +697,34 @@ inline void ExpandArrayFast(const u8* __restrict hash,
   }
 }
 
+void Solver::ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
+                                      PairLink l8_link2, u32 link2_position) {
+  // Make space for a new solution.
+  if (solution_objects_.size() < valid_solutions_ + 1)
+    solution_objects_.emplace_back(512);
+
+  auto& solution = solution_objects_[valid_solutions_];
+  auto success = ExtractSolution(l8_link1, link1_position,
+                                 l8_link2, link2_position,
+                                 solution, 8);
+  if (!success) {
+    invalid_solutions_++;
+    return;
+  }
+
+  if (Const::kRecomputeSolution) {
+    if (!RecomputeSolution(solution, 8, false)) {
+      fprintf(stderr,
+              "********** FATAL ERROR: Invalid solution!! **********\n");
+      invalid_solutions_++;
+      return;
+    }
+  }
+  // Reorder the solution if it is valid
+  ReorderSolution(solution);
+  valid_solutions_++;
+}
+
 bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
                              PairLink l8_link2, u32 link2_position,
                              std::vector<u32>& result,
@@ -791,8 +767,6 @@ bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
         return false;
       }
       auto tr = link.Translate(ref);
-//      target->push_back(link.orig_first);
-//      target->push_back(link.orig_second);
       target->push_back(tr.first);
       target->push_back(tr.second);
       if (Const::kCheckLinksConsistency && !link.Validate(ref)) {
@@ -880,26 +854,6 @@ bool Solver::RecomputeSolution(std::vector<u32>& solution,
       GenerateOTStringTest(solution[i], xstrings[i]);
     else
       GenerateOTString(string_index, xstrings[i]);
-  }
-
-  if (false) {
-    // Start with the last
-    OneTimeString combined = xstrings[solution_size - 1];
-    for (auto i : range(solution_size - 1)) {
-      // XOR-in all but the last
-      XOR(combined.GetRawData(0),
-          combined.GetRawData(0),
-          xstrings[i].GetRawData(0),
-          OneTimeString::hash_length);
-    }
-    bool all0 = true;
-    auto check_segments = (level == 8 ? 10 : level + 1);
-    for (auto segment : range(check_segments)) {
-      if (!(combined.GetCleanSegment(segment) == 0)) {
-        // printf("Not all segments XOR-ed to 0: %d!\n", segment);
-        return false;
-      }
-    }
   }
 
   auto indices = solution.data();

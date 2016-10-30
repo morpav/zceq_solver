@@ -38,10 +38,6 @@ class PairLink {
   struct Translated {
     u32 first;
     u32 second;
-    u32 larger;
-    u32 smaller;
-    u32 bucket;
-    u32 partition;
   };
  public:
   PairLink() = default;
@@ -68,9 +64,8 @@ class PairLink {
 #endif
   }
   inline void copy_nt(PairLink value) {
-    // _mm_stream_si32((int*)this, value.data_);
-    memcpy_nt<sizeof *this>(this, &value);
-//    _mm_stream_si64((long long*)this, (i64)value.data_);
+    static_assert(sizeof(i32) == sizeof *this, "Different size of pair link used for nt-store");
+    _mm_stream_si32((int*)this, value.data_);
   }
   inline Translated Translate(u64 link_position) {
     auto indices = data_ & ((1u << Const::kBucketInIndexShift) - 1);
@@ -88,13 +83,10 @@ class PairLink {
     auto bucket = (u32)(partition << (32u - Const::kBucketInIndexShift) |
                         data_ >> Const::kBucketInIndexShift);
 
-    auto assert_pair = PairLink{larger, smaller, bucket};
-    assert(assert_pair.GetData() == data_);
 
     auto result = Translated{
         u32(Const::kItemsInBucket * bucket + smaller),
-        u32(Const::kItemsInBucket * bucket + larger),
-        larger, smaller, bucket, partition
+        u32(Const::kItemsInBucket * bucket + larger)
     };
 #ifdef LINK_ORIGINALS
     assert(orig_first == result.first);
@@ -250,11 +242,6 @@ struct BucketIndices {
     for (auto i : range(Const::kBucketCount)) {
       for (auto p : range(Const::kPartitionCount))
         sum += partition_sizes[i][p];
-//      auto last_partition_start =
-//          (i * Const::kItemsInBucket) + (Const::kPartitionCount - 1) * Const::kItemsInOutPartition;
-//      assert(counter[i] >= last_partition_start);
-//      assert(counter[i] < (i + 1) * Const::kItemsInBucket);
-//      sum += counter[i] - last_partition_start;
     }
     return sum;
   }
@@ -264,9 +251,6 @@ struct BucketIndices {
       auto diff = counter[i] - (i * Const::kItemsInBucket);
       if (diff > Const::kItemsInBucket)
         assert(false);
-//      auto diff = counter[i] - start;
-//      if (diff >= Const::kItemsInBucket)
-//        assert(false);
     }
   }
 
@@ -315,14 +299,12 @@ struct Context {
   vector<u16> count;
   vector<u16> cum_sum;
   vector<u16> collisions;
-  vector<u8> alt_index;
 
   void Allocate() {
     hash.resize(Const::kItemsInBucket);
     count.resize(Const::kHashTableSize);
     cum_sum.resize(Const::kHashTableSize);
     collisions.resize(Const::kItemsInBucket);
-    alt_index.resize(Const::kMaximumStringSetSize);
   }
 };
 
@@ -342,8 +324,6 @@ class ReductionStep {
   SpaceAllocator::Space* out_strings = nullptr;
   SpaceAllocator::Space* target_link_index = nullptr;
 
-  u32 out_strings_limit = 0;
-
   ReductionStep(SolverT& solver) : solver_(solver) {};
 
   bool PrepareRTConfiguration();
@@ -357,7 +337,6 @@ class ReductionStep {
 
   InString* in_strings_ = nullptr;
   OutString* out_strings_ = nullptr;
-  InString* reordered_temp_strings_ = nullptr;
   PairLink* target_pair_index_ = nullptr;
 
   std::vector<u32> collisions_;
@@ -419,18 +398,6 @@ class Solver {
                        u32 link_level);
   u32 ReorderSolution(std::vector<u32>& solution);
   bool RecomputeSolution(std::vector<u32>& solution, u32 level, bool check_ordering);
-  template<typename StringType>
-  u64 AvailableStringSlots() {
-    return Const::kMaximumStringSetSize -
-           // Let some space for generating all collision strings from
-           // one collision group (without overwriting something outside
-           // the memory buffer.
-           Const::kTooManyBasicCollisions * (Const::kTooManyBasicCollisions - 1)
-           // Allow XOR operation (during new string generation) to reach behind
-           // the generated string.
-           - 1;
-  }
-
   void ResetTimer();
 
   void ReportStep(const char* name, bool major = false);
