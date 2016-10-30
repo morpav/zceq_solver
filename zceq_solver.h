@@ -74,8 +74,14 @@ class PairLink {
   }
   inline Translated Translate(u64 link_position) {
     auto indices = data_ & ((1u << Const::kBucketInIndexShift) - 1);
-    auto larger = (u32)std::round(std::sqrt((double)(2 * indices + 1)));
-    auto smaller = (u32)(indices - (larger * (larger - 1) / 2));
+
+    auto larger = (u32)(std::sqrt((float)(2 * indices + 1)));
+    auto smaller = indices - (larger * (larger - 1) / 2);
+    // Compensate missing rounding. Theese are just a few branch-less intructions
+    // instead of calling round.
+    int over = smaller >= larger;
+    smaller -= larger * over;
+    larger += over;
 
     auto partition = u32((link_position % Const::kItemsInBucket) / Const::kItemsInOutPartition);
     partition &= ((1u << Const::kPartitionCountBits) - 1);
