@@ -20,7 +20,7 @@ struct Const {
   static constexpr u32 kInitialStringSetSize = 1u << (kHashSegmentBits + 1);
 
   static constexpr u64 kMemoryForExpandedProblem = 76ul;
-  static constexpr u64 kMemoryForNonExpandedProblem = 80ul; //68ul;
+  static constexpr u64 kMemoryForNonExpandedProblem = 68ul;
 //  static constexpr u64 kMemoryForExpandedProblem = 376ul;
 //  static constexpr u64 kMemoryForNonExpandedProblem = 380ul; //68ul;
 
