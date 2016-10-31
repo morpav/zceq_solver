@@ -62,7 +62,7 @@ run_benchmark: $(build_dir)/zceq_benchmark
 	@echo '   Alternatively, run make as "$ make NOPROFILING=1"'
 	@echo ''
 	@echo '**********************************************************'
-	$(build_dir)/zceq_benchmark --profiling
+	$(build_dir)/zceq_benchmark -i30
 	make NOPROFILING=1 USE_PROFILE_DATA=1
 
 $(build_dir)/zceq_benchmark: $(addprefix $(build_dir)/,$(benchmark_objs) $(blake2_objs) $(objs))

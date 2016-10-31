@@ -16,10 +16,19 @@ int main(const int argc, const char * const * argv) {
   if (Const::kGenerateTestSet)
     fprintf(stderr, "[zceq_solver] Warning: `Const::kRecomputeBatchHashes` == true.");
 
-  args::ArgumentParser parser("This is a simple benchmarking program for zceq_solver", "");
+  args::ArgumentParser parser("This is a simple benchmarking and program for zceq_solver. It helps with profili guided"
+                                  " optimizations too. The isntruction sets flags are independent in a sense that for example"
+                                  " by disabling SSE2 you don't disable SSE4.1.", "");
   args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
-  args::Flag profiling(parser, "profiling", "Run limited number of iterations used when profiling the code.", {"profiling"});
-  args::ValueFlag<int> iterations(parser, "iterations", "Number of different nonces to iterate", {'i', "iterations"});
+  args::Flag noavx2(parser, "no-avx2", "Disable support for AVX2 instructions.", {"no-avx2"});
+  args::Flag noavx1(parser, "no-avx1", "Disable support for AVX1 instructions.", {"no-avx1"});
+  args::Flag nosse41(parser, "no-sse41", "Disable support for SSE4.1 instructions.", {"no-sse41"});
+  args::Flag nossse3(parser, "no-ssse3", "Disable support for SSSE3 instructions.", {"no-ssse3"});
+  args::Flag nosse2(parser, "no-sse2", "Disable support for SSE2 instructions.", {"no-sse2"});
+  args::Flag no_batch_blake(parser, "no-batch-blake", "Don't use batch versions of blake2b hash functions.", {"no-batch-blake"});
+  args::Flag no_asm_blake(parser, "no-asm-blake", "Don't use asm versions of AVX2 and AVX1 batch blake implementations.", {"no-asm-blake"});
+
+  args::ValueFlag<int> iterations(parser, "iterations", "Number of different nonces to iterate (default = 50)", {'i', "iterations"});
 
   try {
     parser.ParseCLI(argc, argv);
@@ -39,11 +48,27 @@ int main(const int argc, const char * const * argv) {
     return 1;
   }
 
+  // Process command line options and disable various instrucion sets.
+  auto& batch = RunTimeConfig.kBatchBlakeAllowed;
+  auto& scalar = RunTimeConfig.kScalarBlakeAllowed;
+  if (noavx2)
+    batch.AVX2 = scalar.AVX2 = false;
+  if (noavx1)
+    batch.AVX1 = scalar.AVX1 = false;
+  if (nosse41)
+    batch.SSE41 = scalar.SSE41 = false;
+  if (nossse3)
+    batch.SSSE3 = scalar.SSSE3 = false;
+  if (nosse2)
+    batch.SSE2 = scalar.SSE2 = false;
+  if (no_batch_blake)
+    RunTimeConfig.kAllowBlake2bInBatches = false;
+  if (no_asm_blake)
+    RunTimeConfig.kUseAsmBlake2b = false;
+
   int iterations_count = 50;
   if (iterations)
     iterations_count = iterations.Get();
-  if (profiling)
-    iterations_count = 30;
 
   // std::srand(std::chrono::steady_clock::now().time_since_epoch().count());
   std::srand(33);
