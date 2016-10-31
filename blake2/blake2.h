@@ -38,7 +38,6 @@ typedef struct crypto_generichash_blake2b_state {
 #define blake2b_final                    crypto_generichash_blake2b__final
 #define blake2b                          crypto_generichash_blake2b__blake2b
 #define blake2b_salt_personal            crypto_generichash_blake2b__blake2b_salt_personal
-#define blake2b_pick_best_implementation crypto_generichash_blake2b__pick_best_implementation
 */
 enum blake2b_constant
 {
@@ -95,7 +94,6 @@ int blake2b_salt_personal( uint8_t *out, const void *in, const void *key, const 
 
 typedef int ( *blake2b_compress_fn )( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] );
 extern blake2b_compress_fn blake2b_compress;
-int blake2b_pick_best_implementation(void);
 int blake2b_compress_ref( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] );
 int blake2b_compress_ssse3( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] );
 int blake2b_compress_sse41( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] );

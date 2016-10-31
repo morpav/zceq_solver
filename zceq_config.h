@@ -6,6 +6,28 @@
 
 namespace zceq_solver {
 
+// By default, all instruction sets specifically supported are allowed.
+// A user may want to disable some instructions set mostly to force the solver
+// to use different code paths for profile guided compiler optimizations.
+struct InstructionSet {
+  bool AVX2 = true;
+  bool AVX1 = true;
+  bool SSE41 = true;
+  bool SSSE3 = true;
+  bool SSE2 = true;
+};
+
+struct RTConfig {
+  InstructionSet kBatchBlakeAllowed;
+  InstructionSet kScalarBlakeAllowed;
+  // Turn off to force the solver to use scalar blake2b implementations.
+  bool kAllowBlake2bInBatches = true;
+  // Turn off to force the solver to use intrinsics-based blake2b implementations.
+  bool kUseAsmBlake2b = true;
+};
+
+extern RTConfig RunTimeConfig;
+
 struct Const {
   // Problem setup, some cannot be changed without code changes.
   static constexpr u32 N_parameter = 200;

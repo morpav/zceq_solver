@@ -219,9 +219,14 @@ struct CPUInfo {
   int edx;
 };
 
-static inline void cpuid(CPUInfo& info, int functionnumber) {
+enum class CPUIDFunction : int {
+  ProcInfoAndFeatures = 0x01,
+  ExtendedFeatures = 0x07,
+};
+
+static inline void cpuid(CPUInfo& info, CPUIDFunction function) {
   int a, b, c, d;
-  __asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(functionnumber), "c"(0) : );
+  __asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(function), "c"(0) : );
   info.eax = a;
   info.ebx = b;
   info.ecx = c;
@@ -230,26 +235,32 @@ static inline void cpuid(CPUInfo& info, int functionnumber) {
 
 static inline bool HasAvx2Support() {
   CPUInfo info;
-  cpuid(info, 0x00000007);
+  cpuid(info, CPUIDFunction::ExtendedFeatures);
   return (info.ebx & 0x20) != 0;
 }
 
 static inline bool HasAvx1Support() {
   CPUInfo info;
-  cpuid(info, 0x00000001);
+  cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x10000000) != 0;
 }
 
 static inline bool HasSSE41Support() {
   CPUInfo info;
-  cpuid(info, 0x00000001);
+  cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x80000) != 0;
 }
 
 static inline bool HasSSSE3Support() {
   CPUInfo info;
-  cpuid(info, 0x00000001);
+  cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x200) != 0;
+}
+
+static inline bool HasSSE2Support() {
+  CPUInfo info;
+  cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
+  return (info.edx & 0x4000000) != 0;
 }
 
 

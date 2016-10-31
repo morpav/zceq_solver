@@ -8,6 +8,8 @@
 
 namespace zceq_solver {
 
+RTConfig RunTimeConfig;
+
 void ExpandArrayFast(const u8* hash, u8* array);
 void ReorderBitsInHash(const u8* __restrict hash,
                               u8* __restrict array);
@@ -572,7 +574,7 @@ i32 Solver::Run() {
     // Only when it is allowed and we detected a batch backend,
     // use batch string generation.
     auto batch_size = blake.GetBatchSize();
-    if (Const::kAllowBlakeInBatches && batch_size > 0) {
+    if (RunTimeConfig.kAllowBlake2bInBatches && batch_size > 0) {
       switch (batch_size) {
         case 4:
           GenerateXStringsBatch<4>(space_X1, &buckets1);

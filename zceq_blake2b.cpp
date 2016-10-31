@@ -37,8 +37,31 @@ static constexpr u8 d[8] = {12,13,14,15,15,12,13,14};
 
 
 __attribute__((target("avx2")))
-__attribute__((__always_inline__))
-static inline void AddMessage(YWord& output, YWord input, const YWord* messages, u32 round, u32 g_iter, u32 g_4_7) {
+__attribute__((always_inline))
+static inline void AddMessageAVX2(YWord& output, YWord input, const YWord* messages,
+                                  u32 round, u32 g_iter, u32 g_4_7) {
+  auto msg_offset = sigma[round][2 * g_iter + g_4_7];
+  if (msg_offset < 2)
+    output = input + messages[msg_offset];
+  else
+    output = input;
+}
+
+__attribute__((target("avx")))
+__attribute__((always_inline))
+static inline void AddMessageAVX1(XWord& output, XWord input, const XWord* messages,
+                                  u32 round, u32 g_iter, u32 g_4_7) {
+  auto msg_offset = sigma[round][2 * g_iter + g_4_7];
+  if (msg_offset < 2)
+    output = input + messages[msg_offset];
+  else
+    output = input;
+}
+
+__attribute__((target("sse2")))
+__attribute__((always_inline))
+static inline void AddMessageSSE2(XWord& output, XWord input, const XWord* messages,
+                                  u32 round, u32 g_iter, u32 g_4_7) {
   auto msg_offset = sigma[round][2 * g_iter + g_4_7];
   if (msg_offset < 2)
     output = input + messages[msg_offset];
@@ -47,16 +70,15 @@ static inline void AddMessage(YWord& output, YWord input, const YWord* messages,
 }
 
 __attribute__((target("avx2")))
-__attribute__((__always_inline__))
+__attribute__((always_inline))
 static inline YWord Broadcast64(u64 value) {
   return _mm256_broadcastq_epi64(*(XWord*)&value);
 }
 
 template<u8 round, int shift>
 __attribute__((target("avx2")))
-__attribute__((__always_inline__))
-static inline void G_sequence(const YWord* messages,
-                              YWord v[16]) {
+__attribute__((always_inline))
+static inline void G_sequence(const YWord* messages, YWord v[16]) {
   const auto rotate16 = _mm256_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
                                          10, 11, 12, 13, 14, 15, 8, 9,
                                          2, 3, 4, 5, 6, 7, 0, 1,
@@ -69,7 +91,7 @@ static inline void G_sequence(const YWord* messages,
 
   // a = a + b + m[blake2b_sigma[r][2*i+0]];
   for (auto i : range(shift, shift + 4))
-    AddMessage(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 0);
+    AddMessageAVX2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 0);
 
   // d = rotr64(d ^ a, 32);
   for (auto i : range(shift, shift + 4))
@@ -85,7 +107,7 @@ static inline void G_sequence(const YWord* messages,
 
   // a = a + b + m[blake2b_sigma[r][2*i+1]];
   for (auto i : range(shift, shift + 4))
-    AddMessage(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 1);
+    AddMessageAVX2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 1);
 
   // d = rotr64(d ^ a, 16);
   for (auto i : range(shift, shift + 4))
@@ -102,6 +124,138 @@ static inline void G_sequence(const YWord* messages,
   }
 }
 
+template<u8 round, int shift>
+__attribute__((target("avx")))
+__attribute__((always_inline))
+static inline void G_sequence_AVX1(const XWord* messages, XWord v[16]) {
+  const auto rotate16 = _mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
+                                      10, 11, 12, 13, 14, 15, 8, 9);
+  const auto rotate24 = _mm_setr_epi8(3, 4, 5, 6, 7, 0, 1, 2,
+                                      11, 12, 13, 14, 15, 8, 9, 10 );
+
+  // a = a + b + m[blake2b_sigma[r][2*i+0]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageAVX1(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 0);
+
+  // d = rotr64(d ^ a, 32);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi32(v[d[i]] ^ v[a[i]], _MM_SHUFFLE(2, 3, 0, 1));
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 24);
+  for (auto i : range(shift, shift + 4))
+    v[b[i]] = _mm_shuffle_epi8(v[b[i]] ^ v[c[i]], rotate24);
+
+  // a = a + b + m[blake2b_sigma[r][2*i+1]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageAVX1(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 1);
+
+  // d = rotr64(d ^ a, 16);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi8(v[d[i]] ^ v[a[i]], rotate16);
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 63);
+  for (auto i : range(shift, shift + 4)) {
+    v[b[i]] = v[b[i]] ^ v[c[i]];
+    v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
+  }
+}
+
+template<u8 round, int shift>
+__attribute__((target("ssse3")))
+__attribute__((always_inline))
+static inline void G_sequence_SSSE3(const XWord* messages, XWord v[16]) {
+  const auto rotate16 = _mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
+                                      10, 11, 12, 13, 14, 15, 8, 9);
+  const auto rotate24 = _mm_setr_epi8(3, 4, 5, 6, 7, 0, 1, 2,
+                                      11, 12, 13, 14, 15, 8, 9, 10 );
+
+  // a = a + b + m[blake2b_sigma[r][2*i+0]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageSSE2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 0);
+
+  // d = rotr64(d ^ a, 32);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi32(v[d[i]] ^ v[a[i]], _MM_SHUFFLE(2, 3, 0, 1));
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 24);
+  for (auto i : range(shift, shift + 4))
+    v[b[i]] = _mm_shuffle_epi8(v[b[i]] ^ v[c[i]], rotate24);
+
+  // a = a + b + m[blake2b_sigma[r][2*i+1]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageSSE2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 1);
+
+  // d = rotr64(d ^ a, 16);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi8(v[d[i]] ^ v[a[i]], rotate16);
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 63);
+  for (auto i : range(shift, shift + 4)) {
+    v[b[i]] = v[b[i]] ^ v[c[i]];
+    v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
+  }
+}
+
+template<u8 round, int shift>
+__attribute__((target("sse2")))
+__attribute__((always_inline))
+static inline void G_sequence_SSE2(const XWord* messages, XWord v[16]) {
+  const auto rotate16 = _mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
+                                      10, 11, 12, 13, 14, 15, 8, 9);
+  const auto rotate24 = _mm_setr_epi8(3, 4, 5, 6, 7, 0, 1, 2,
+                                      11, 12, 13, 14, 15, 8, 9, 10 );
+
+  // a = a + b + m[blake2b_sigma[r][2*i+0]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageSSE2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 0);
+
+  // d = rotr64(d ^ a, 32);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi32(v[d[i]] ^ v[a[i]], _MM_SHUFFLE(2, 3, 0, 1));
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 24);
+  for (auto i : range(shift, shift + 4))
+    v[b[i]] = _mm_shuffle_epi8(v[b[i]] ^ v[c[i]], rotate24);
+
+  // a = a + b + m[blake2b_sigma[r][2*i+1]];
+  for (auto i : range(shift, shift + 4))
+    AddMessageSSE2(v[a[i]], v[a[i]] + v[b[i]], messages, round, i, 1);
+
+  // d = rotr64(d ^ a, 16);
+  for (auto i : range(shift, shift + 4))
+    v[d[i]] = _mm_shuffle_epi8(v[d[i]] ^ v[a[i]], rotate16);
+
+  // c = c + d;
+  for (auto i : range(shift, shift + 4))
+    v[c[i]] = v[c[i]] + v[d[i]];
+
+  // b = rotr64(b ^ c, 63);
+  for (auto i : range(shift, shift + 4)) {
+    v[b[i]] = v[b[i]] ^ v[c[i]];
+    v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
+  }
+}
+
 alignas(64) static const uint64_t blake2b_IV[8] =
 {
   0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL,
@@ -111,7 +265,7 @@ alignas(64) static const uint64_t blake2b_IV[8] =
 };
 
 __attribute__((target("avx2")))
-inline void Compress4Int(const YWord msgs[2], const YWord state_init[8], YWord h[8]) {
+inline void Compress4IntAVX2(const YWord msgs[2], const YWord state_init[8], YWord h[8]) {
   YWord v[16];
 
   for (auto i : range(8))
@@ -149,41 +303,138 @@ inline void Compress4Int(const YWord msgs[2], const YWord state_init[8], YWord h
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
 
-/*
-__attribute__((target("avx2")))
-void Blake2b::Compress4(Blake2b::State* state, u64 block[2]) {
-  alignas(32) u64 h[8][4];
-  alignas(32) u64 m[2][4];
+__attribute__((target("avx")))
+inline void Compress2IntAVX1(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
+  XWord v[16];
 
-  for (auto i : range(8)) {
-    for (auto v : range(4))
-      h[i][v] = state->h64[i];
-  }
-  for (auto i : range(2)) {
-    for (auto v : range(4))
-      m[i][v] = block[i];
-  }
-  Compress4Int(state, (YWord*)&m, (YWord*)h);
-  for (auto i : range(8)) {
-    state->h64[i] = h[i][0];
-  }
+  for (auto i : range(8))
+    v[i] = h[i];
+
+  for (auto i : range(8))
+    v[i + 8] = state_init[i];
+
+  G_sequence_AVX1<0, 0>(msgs, v);
+  G_sequence_AVX1<0, 4>(msgs, v);
+  G_sequence_AVX1<1, 0>(msgs, v);
+  G_sequence_AVX1<1, 4>(msgs, v);
+  G_sequence_AVX1<2, 0>(msgs, v);
+  G_sequence_AVX1<2, 4>(msgs, v);
+  G_sequence_AVX1<3, 0>(msgs, v);
+  G_sequence_AVX1<3, 4>(msgs, v);
+  G_sequence_AVX1<4, 0>(msgs, v);
+  G_sequence_AVX1<4, 4>(msgs, v);
+  G_sequence_AVX1<5, 0>(msgs, v);
+  G_sequence_AVX1<5, 4>(msgs, v);
+  G_sequence_AVX1<6, 0>(msgs, v);
+  G_sequence_AVX1<6, 4>(msgs, v);
+  G_sequence_AVX1<7, 0>(msgs, v);
+  G_sequence_AVX1<7, 4>(msgs, v);
+  G_sequence_AVX1<8, 0>(msgs, v);
+  G_sequence_AVX1<8, 4>(msgs, v);
+  G_sequence_AVX1<9, 0>(msgs, v);
+  G_sequence_AVX1<9, 4>(msgs, v);
+  G_sequence_AVX1<10, 0>(msgs, v);
+  G_sequence_AVX1<10, 4>(msgs, v);
+  G_sequence_AVX1<11, 0>(msgs, v);
+  G_sequence_AVX1<11, 4>(msgs, v);
+
+  for (auto i : range(8))
+    h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
-*/
 
-void IntrinsicsAVX2::Precompute(const u8* header_and_nonce, u64 length,
-                                const State* state) {
+__attribute__((target("ssse3")))
+inline void Compress2IntSSSE3(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
+  XWord v[16];
+
+  for (auto i : range(8))
+    v[i] = h[i];
+
+  for (auto i : range(8))
+    v[i + 8] = state_init[i];
+
+  G_sequence_SSSE3<0, 0>(msgs, v);
+  G_sequence_SSSE3<0, 4>(msgs, v);
+  G_sequence_SSSE3<1, 0>(msgs, v);
+  G_sequence_SSSE3<1, 4>(msgs, v);
+  G_sequence_SSSE3<2, 0>(msgs, v);
+  G_sequence_SSSE3<2, 4>(msgs, v);
+  G_sequence_SSSE3<3, 0>(msgs, v);
+  G_sequence_SSSE3<3, 4>(msgs, v);
+  G_sequence_SSSE3<4, 0>(msgs, v);
+  G_sequence_SSSE3<4, 4>(msgs, v);
+  G_sequence_SSSE3<5, 0>(msgs, v);
+  G_sequence_SSSE3<5, 4>(msgs, v);
+  G_sequence_SSSE3<6, 0>(msgs, v);
+  G_sequence_SSSE3<6, 4>(msgs, v);
+  G_sequence_SSSE3<7, 0>(msgs, v);
+  G_sequence_SSSE3<7, 4>(msgs, v);
+  G_sequence_SSSE3<8, 0>(msgs, v);
+  G_sequence_SSSE3<8, 4>(msgs, v);
+  G_sequence_SSSE3<9, 0>(msgs, v);
+  G_sequence_SSSE3<9, 4>(msgs, v);
+  G_sequence_SSSE3<10, 0>(msgs, v);
+  G_sequence_SSSE3<10, 4>(msgs, v);
+  G_sequence_SSSE3<11, 0>(msgs, v);
+  G_sequence_SSSE3<11, 4>(msgs, v);
+
+  for (auto i : range(8))
+    h[i] = h[i] ^ v[i] ^ v[i + 8];
+}
+
+__attribute__((target("sse2")))
+inline void Compress2IntSSE2(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
+  XWord v[16];
+
+  for (auto i : range(8))
+    v[i] = h[i];
+
+  for (auto i : range(8))
+    v[i + 8] = state_init[i];
+
+  G_sequence_SSE2<0, 0>(msgs, v);
+  G_sequence_SSE2<0, 4>(msgs, v);
+  G_sequence_SSE2<1, 0>(msgs, v);
+  G_sequence_SSE2<1, 4>(msgs, v);
+  G_sequence_SSE2<2, 0>(msgs, v);
+  G_sequence_SSE2<2, 4>(msgs, v);
+  G_sequence_SSE2<3, 0>(msgs, v);
+  G_sequence_SSE2<3, 4>(msgs, v);
+  G_sequence_SSE2<4, 0>(msgs, v);
+  G_sequence_SSE2<4, 4>(msgs, v);
+  G_sequence_SSE2<5, 0>(msgs, v);
+  G_sequence_SSE2<5, 4>(msgs, v);
+  G_sequence_SSE2<6, 0>(msgs, v);
+  G_sequence_SSE2<6, 4>(msgs, v);
+  G_sequence_SSE2<7, 0>(msgs, v);
+  G_sequence_SSE2<7, 4>(msgs, v);
+  G_sequence_SSE2<8, 0>(msgs, v);
+  G_sequence_SSE2<8, 4>(msgs, v);
+  G_sequence_SSE2<9, 0>(msgs, v);
+  G_sequence_SSE2<9, 4>(msgs, v);
+  G_sequence_SSE2<10, 0>(msgs, v);
+  G_sequence_SSE2<10, 4>(msgs, v);
+  G_sequence_SSE2<11, 0>(msgs, v);
+  G_sequence_SSE2<11, 4>(msgs, v);
+
+  for (auto i : range(8))
+    h[i] = h[i] ^ v[i] ^ v[i + 8];
+}
+
+template<u8 batch_size>
+void IntrinsicsBackend<batch_size>::Precompute(const u8* header_and_nonce, u64 length,
+                                               const State* state) {
   auto second_block_nonce = (u32*) (header_and_nonce + 128);
   // Prepare transposed vectorized version of non-zero parts of the second block.
   // It is used for batch computation of multiple hashes simultaneously.
-  for (auto i : range(4)) {
-    second_block4_->dwords[0][2 * i] = second_block_nonce[0];
-    second_block4_->dwords[0][2 * i + 1] = second_block_nonce[1];
-    second_block4_->dwords[1][2 * i] = second_block_nonce[2];
+  for (auto i : range(batch_size)) {
+    second_blockN_->dwords[0][2 * i] = second_block_nonce[0];
+    second_blockN_->dwords[0][2 * i + 1] = second_block_nonce[1];
+    second_blockN_->dwords[1][2 * i] = second_block_nonce[2];
     // Space for g.
-    second_block4_->dwords[1][2 * i + 1] = 0;
+    second_blockN_->dwords[1][2 * i + 1] = 0;
   }
 
-  for (auto i : range(4)) {
+  for (auto i : range(batch_size)) {
     (*init_vectors_)[0][i] = blake2b_IV[0];
     (*init_vectors_)[1][i] = blake2b_IV[1];
     (*init_vectors_)[2][i] = blake2b_IV[2];
@@ -195,7 +446,7 @@ void IntrinsicsAVX2::Precompute(const u8* header_and_nonce, u64 length,
   }
 
   for (auto vec : range(8)) {
-    for (auto i : range(4)) {
+    for (auto i : range(batch_size)) {
       (*hash_init_vectors_)[vec][i] = state->h64[vec];
     }
   }
@@ -204,35 +455,70 @@ void IntrinsicsAVX2::Precompute(const u8* header_and_nonce, u64 length,
 __attribute__((target("avx2")))
 void IntrinsicsAVX2::Finalize(u32 g_start) {
   // Fill g indices into the vectorized (transposed) block parts.
-  for (auto i : range(4))
-    second_block4_->dwords[1][2*i + 1] = g_start + i;
+  for (auto i : range(kBatchSize))
+    second_blockN_->dwords[1][2*i + 1] = g_start + i;
 
-  memcpy(hash_out_vectors_, hash_init_vectors_, sizeof(Vectors8x4));
+  memcpy(hash_out_vectors_, hash_init_vectors_, sizeof(Vectors8xN));
 
   // Compute 4 Blake2b hashes simultaneously!
-  Compress4Int((YWord*)second_block4_, (YWord*)init_vectors_, (YWord*)hash_out_vectors_);
+  Compress4IntAVX2((YWord*)second_blockN_, (YWord*)init_vectors_, (YWord*)hash_out_vectors_);
 
   // Transpose the result hashes
-  for (auto vec : range(4))
+  for (auto vec : range(kBatchSize))
     for (auto part : range(7))
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
 
-
-#pragma GCC target("sse2")
-
-// __attribute__((target("sse2")))
-XWord PADDQ_sse2(XWord a, XWord b) {
-  //  _mm_srli_epi64()
-  // _mm_shuffle_epi32
-  return _mm_add_epi64(a, b);
-}
-
-#pragma GCC reset_options
-
 __attribute__((target("avx")))
-XWord PADDQ_avx(XWord a, XWord b) {
-  return _mm_add_epi64(a, b);
+void IntrinsicsAVX1::Finalize(u32 g_start) {
+  // Fill g indices into the vectorized (transposed) block parts.
+  for (auto i : range(kBatchSize))
+    second_blockN_->dwords[1][2*i + 1] = g_start + i;
+
+  memcpy(hash_out_vectors_, hash_init_vectors_, sizeof(Vectors8xN));
+
+  // Compute 2 Blake2b hashes simultaneously!
+  Compress2IntAVX1((XWord*)second_blockN_, (XWord*)init_vectors_, (XWord*)hash_out_vectors_);
+
+  // Transpose the result hashes
+  for (auto vec : range(kBatchSize))
+    for (auto part : range(7))
+      hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
+
+__attribute__((target("ssse3")))
+void IntrinsicsSSSE3::Finalize(u32 g_start) {
+  // Fill g indices into the vectorized (transposed) block parts.
+  for (auto i : range(kBatchSize))
+    second_blockN_->dwords[1][2*i + 1] = g_start + i;
+
+  memcpy(hash_out_vectors_, hash_init_vectors_, sizeof(Vectors8xN));
+
+  // Compute 2 Blake2b hashes simultaneously!
+  Compress2IntSSSE3((XWord*)second_blockN_, (XWord*)init_vectors_, (XWord*)hash_out_vectors_);
+
+  // Transpose the result hashes
+  for (auto vec : range(kBatchSize))
+    for (auto part : range(7))
+      hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
+}
+
+__attribute__((target("sse2")))
+void IntrinsicsSSE2::Finalize(u32 g_start) {
+  // Fill g indices into the vectorized (transposed) block parts.
+  for (auto i : range(kBatchSize))
+    second_blockN_->dwords[1][2*i + 1] = g_start + i;
+
+  memcpy(hash_out_vectors_, hash_init_vectors_, sizeof(Vectors8xN));
+
+  // Compute 2 Blake2b hashes simultaneously!
+  Compress2IntSSE2((XWord*)second_blockN_, (XWord*)init_vectors_, (XWord*)hash_out_vectors_);
+
+  // Transpose the result hashes
+  for (auto vec : range(kBatchSize))
+    for (auto part : range(7))
+      hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
+}
+
 
 }  // namespace zceq_solver

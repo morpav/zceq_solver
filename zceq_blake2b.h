@@ -16,7 +16,6 @@ void Blake2PrepareMidstate4(void *midstate, unsigned char *input);
 void Blake2Run4(unsigned char* hashout, void* midstate, uint32_t indexctr);
 void Blake2PrepareMidstate2(void *midstate, unsigned char *input);
 void Blake2Run2(unsigned char *hashout, void *midstate, uint32_t indexctr);
-int blake2b_pick_best_implementation(void);
 }
 
 namespace zceq_solver {
@@ -191,44 +190,71 @@ class alignas(32) Blake2b {
 };
 
 
-class IntrinsicsAVX2 : public BlakeBatchBackend {
+template<u8 batch_size>
+class IntrinsicsBackend : public BlakeBatchBackend {
  public:
-  using Vectors8x4 = u64[8][4];
+  using Vectors8xN = u64[8][batch_size];
+  static constexpr u8 kBatchSize = batch_size;
 
-  IntrinsicsAVX2() {
-    auto len = 4*256 + sizeof(SecondBlockNonZero4);
+  IntrinsicsBackend() {
+    auto len = 3 * sizeof(Vectors8xN) +
+        batch_size * sizeof(BatchHash) +
+        sizeof(SecondBlockNonZeroN);
     auto mem = AllocateAligned(len);
 
-    init_vectors_ = (Vectors8x4*)mem;
-    hash_init_vectors_ = (Vectors8x4*)(mem + 256);
-    hash_out_vectors_ = (Vectors8x4*)(mem + 512);
-    hash_output_ = (BatchHash*)(mem + 768);
-    second_block4_ = (SecondBlockNonZero4*)(mem + 1024);
+    init_vectors_ = (Vectors8xN*)mem;
+    mem += sizeof(Vectors8xN);
+
+    hash_init_vectors_ = (Vectors8xN*)mem;
+    mem += sizeof(Vectors8xN);
+
+    hash_out_vectors_ = (Vectors8xN*)mem;
+    mem += sizeof(Vectors8xN);
+
+    hash_output_ = (BatchHash*)mem;
+    mem += sizeof(BatchHash) * batch_size;
+
+    second_blockN_ = (SecondBlockNonZeroN*)mem;
   }
 
-  virtual u32 GetBatchSize() {
-    return 4;
+  union SecondBlockNonZeroN {
+    u32 dwords[2][2 * batch_size];
+    u64 blocks[2][batch_size];
   };
+
+  virtual u32 GetBatchSize() {
+    return batch_size;
+  };
+
+  virtual void Precompute(const u8* header_and_nonce, u64 length,
+                          const State* initial_state);
 
   virtual BatchHash* GetHashOutputMemory() {
     return hash_output_;
   };
 
-  virtual void Precompute(const u8* header_and_nonce, u64 length,
-                          const State* initial_state);
-  virtual void Finalize(u32 g_start);
-
-  union SecondBlockNonZero4 {
-    u32 dwords[2][8];
-    u64 blocks[2][4];
-  };
-
  protected:
-  SecondBlockNonZero4* second_block4_ = nullptr;
+  SecondBlockNonZeroN* second_blockN_ = nullptr;
   BatchHash* hash_output_ = nullptr;
-  Vectors8x4* init_vectors_ = nullptr;
-  Vectors8x4* hash_init_vectors_ = nullptr;
-  Vectors8x4* hash_out_vectors_ = nullptr;
+  Vectors8xN* init_vectors_ = nullptr;
+  Vectors8xN* hash_init_vectors_ = nullptr;
+  Vectors8xN* hash_out_vectors_ = nullptr;
+};
+
+class IntrinsicsAVX2 : public IntrinsicsBackend<4> {
+  virtual void Finalize(u32 g_start);
+};
+
+class IntrinsicsAVX1 : public IntrinsicsBackend<2> {
+  virtual void Finalize(u32 g_start);
+};
+
+class IntrinsicsSSSE3 : public IntrinsicsBackend<2> {
+  virtual void Finalize(u32 g_start);
+};
+
+class IntrinsicsSSE2 : public IntrinsicsBackend<2> {
+  virtual void Finalize(u32 g_start);
 };
 
 class AsmAVX2 : public BlakeBatchBackend {
@@ -258,7 +284,6 @@ class AsmAVX2 : public BlakeBatchBackend {
   BatchHash* hash_output_ = nullptr;
 };
 
-
 class AsmAVX1 : public BlakeBatchBackend {
  public:
   AsmAVX1() {
@@ -287,20 +312,47 @@ class AsmAVX1 : public BlakeBatchBackend {
 };
 
 inline Blake2b::Blake2b() {
-  // Pick best implementation for scalar blake2b.
-  blake2b_pick_best_implementation();
+  // Pick best implementation for scalar blake2b, based on allowed
+  // instruction sets and actual CPU.
+  {
+    auto& allowed = RunTimeConfig.kScalarBlakeAllowed;
+    if (allowed.AVX2 && HasAvx2Support())
+      blake2b_compress = blake2b_compress_avx2;
+    else if (allowed.SSE41 && HasSSE41Support())
+      blake2b_compress = blake2b_compress_sse41;
+    else if (allowed.SSSE3 && HasSSSE3Support())
+      blake2b_compress = blake2b_compress_ssse3;
+    else
+      blake2b_compress = blake2b_compress_ref;
+  }
+
+  // Don't use batch implementation (mostly useful for profilin only).
+  if (!RunTimeConfig.kAllowBlake2bInBatches)
+    return;
 
   // Pick best implementation for batch blake2b.
-  if (HasAvx2Support()) {
-    if (Const::kUseAsmAVX2Code)
-      batch_backend_ = new AsmAVX2();
-    else
-      batch_backend_ = new IntrinsicsAVX2();
-
-  } else if (HasAvx1Support()) {
-    batch_backend_ = new AsmAVX1();
-  } else
-    batch_backend_ = nullptr;
+  {
+    auto& allowed = RunTimeConfig.kBatchBlakeAllowed;
+    // AVX2
+    if (allowed.AVX2 && HasAvx2Support()) {
+      if (RunTimeConfig.kUseAsmBlake2b)
+        batch_backend_ = new AsmAVX2();
+      else
+        batch_backend_ = new IntrinsicsAVX2();
+      // AVX1
+    } else if (allowed.AVX1 && HasAvx1Support()) {
+      if (RunTimeConfig.kUseAsmBlake2b)
+        batch_backend_ = new AsmAVX1();
+      else
+        batch_backend_ = new IntrinsicsAVX1();
+      // SSSE3
+    } else if (allowed.SSSE3 && HasSSSE3Support()) {
+      batch_backend_ = new IntrinsicsSSSE3();
+    } else if (allowed.SSE2 && HasSSE2Support()) {
+      batch_backend_ = new IntrinsicsSSE2();
+    } else
+      batch_backend_ = nullptr;
+  }
 }
 
 }  // namespace zceq_solver

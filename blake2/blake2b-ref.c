@@ -425,33 +425,3 @@ int blake2b_salt_personal( uint8_t *out, const void *in, const void *key, const 
   blake2b_final( S, out, outlen );
   return 0;
 }
-
-static inline void cpuid (int output[4], int functionnumber) {
-  int a, b, c, d;
-  __asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(functionnumber), "c"(0) : );
-  output[0] = a;
-  output[1] = b;
-  output[2] = c;
-  output[3] = d;
-}
-
-int blake2b_pick_best_implementation(void)
-{
-  int info[4];
-  cpuid(info, 0x00000007);
-  if (info[1] & 0x20) {
-    blake2b_compress = blake2b_compress_avx2;
-    return 0;
-  }
-  cpuid(info, 0x00000001);
-  if (info[2] & 0x80000) {
-    blake2b_compress = blake2b_compress_sse41;
-    return 0;
-  }
-  if (info[2] & 0x200) {
-    blake2b_compress = blake2b_compress_ssse3;
-    return 0;
-  }
-  blake2b_compress = blake2b_compress_ref;
-  return 0;
-}
