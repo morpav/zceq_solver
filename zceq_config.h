@@ -86,7 +86,7 @@ struct Const {
   // scratch and checked. So 512 blake2b hashes is calculated and the
   // strings are then collided. Maybe, this is more a debugging
   // option.
-  static constexpr bool kRecomputeSolution = true;
+  static constexpr bool kRecomputeSolution = false;
   // If set, output strings are filtered out if the first 64bits of
   // the produced string is 0. A probability of such a string randomly
   // is small but this can help to detect duplicates early. It turns
@@ -104,7 +104,7 @@ struct Const {
   // Interestingly, this "fail and recover" approach can lead to nice
   // performance. To disable this option for production code some
   // additional testing needs to be done.
-  static constexpr bool kCheckBucketOverflow = false;
+  static constexpr bool kCheckBucketOverflow = true;
   // If enabled, candidate solutions found in step 8 are filtered out
   // if they share a value of the last segment with a previous
   // candidate. This optimization is based on fact that a probability
