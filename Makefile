@@ -57,11 +57,11 @@ run_benchmark: $(build_dir)/zceq_benchmark
 	@echo '**********************************************************'
 	@echo ''
 	@echo '   PROFILING run - please, do NOT stop the process.'
-	@echo '        (this is slower then normal run)'
+	@echo '         This is SLOWER then normal run.'
 	@echo '   Alternatively, run make as "$ make NOPROFILING=1"'
 	@echo ''
 	@echo '**********************************************************'
-	$(build_dir)/zceq_benchmark -i30
+	$(build_dir)/zceq_benchmark --profiling -i5 --no-warmup
 	make NOPROFILING=1 USE_PROFILE_DATA=1
 
 $(build_dir)/zceq_benchmark: $(addprefix $(build_dir)/,$(benchmark_objs) $(blake2_objs) $(objs))
