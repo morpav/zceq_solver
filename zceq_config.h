@@ -61,7 +61,7 @@ struct Const {
   // that the segment is aligned on byte boundary (otherwise
   // additional shift operation is needed).
   static constexpr u32 kHashSegmentBitMask = (1u << kHashSegmentBits) - 1;
-  // Byte length of one hash segement when expanded to whole bytes.
+  // Byte length of one hash segment when expanded to whole bytes.
   // See `kExpandHashes` for details.
   static constexpr u32 kHashSegmentBytes = (kHashSegmentBits + 7) / 8;
   // Number of hash segments in initially generated strings.
@@ -94,7 +94,7 @@ struct Const {
   // on a very hot code path). Other filtering options probably do a
   // good job even without this one.
   static constexpr bool kFilterZeroQWordStrings = false;
-  // Should be set in productin! If not set, the code writes into
+  // Should be set in production! If not set, the code writes into
   // buckets without checking that the bucket is full so it can
   // overwrite strings at the beginning of the following bucket. It is
   // not really probable but it can happen. `kRecomputeSolution` must
@@ -116,20 +116,20 @@ struct Const {
   // Do not change it.
   static constexpr bool kStoreIndicesEarly = false;
   // If set, use non-temporal store instructions to save indices. The
-  // intension is to allow a CPU to NOT load cache lines corresponding
+  // intention is to allow a CPU to NOT load cache lines corresponding
   // to the addresses where we write (we want to bypass cache at
   // all). There are quite strong condition on mem. access patterns
-  // for this to work but they should be satified in this case.
+  // for this to work but they should be satisfied in this case.
   static constexpr bool kUseNonTemporalStoresForIndices = true;
   // If set the solver checks solution validity during step8
-  // immediatelly after finding the candidate. If set to false,
-  // soltion candidates are collected similarly to output strings in
+  // immediately after finding the candidate. If set to false,
+  // solution candidates are collected similarly to output strings in
   // earlier steps and then processed together.
   static constexpr bool kProcessSolutionCandidateEarly = false;
   // Algorithm steps 0 .. (kUseTemporaryHashArrayBeforeStep - 1) uses
   // temporary array to store a part of first segment values for
   // second iteration over string. The temporary array helps to keep
-  // working set smaller bacuse it needs 2B per string instead of
+  // working set smaller because it needs 2B per string instead of
   // e.g. 16B. It can happen that an overhead with writing this array
   // is greater so that we allow to specify which steps should use
   // this optimization and which not.
@@ -138,7 +138,7 @@ struct Const {
   static constexpr u64 kXStringAlignment = 4ul;
   // Alignment for XOR instructions when producing new strings. The
   // alignment affects which and how many instructions is used and can
-  // mesasurably affect performance. Must be a power of 2.
+  // measurably affect performance. Must be a power of 2.
   static constexpr u64 kXORAlignment = 4ul;
   // Multiplier and divisor for computing maximum number of strings the
   // solver can use in any algorithm step. The coefficients are related to
@@ -149,28 +149,28 @@ struct Const {
   // of buckets used by the solver.
   static constexpr u64 kBucketCountBits = 8;
   // Starting bit position for bucket information within pair link
-  // lindex (u32). The rest bits are used for source strings
+  // index (u32). The rest bits are used for source strings
   // identification. Not necessarily all bucket bits can be stored
   // into the pair link index (the rest are computed on-the-fly from
   // the link object position).
   static constexpr u32 kBucketInIndexShift = 26;
-  // When a collistion groups size is equal or greater then this value
+  // When a collision groups size is equal or greater then this value
   // the group is eliminated as a whole before producing any output
   // strings. This value is derived from a collision group size
   // distribution for random strings. This hugely helps to keep the
   // string set small and "healthy".
   static constexpr u32 kTooManyBasicCollisions = 14;
   static constexpr u32 kTooManyFinalCollisions = 3;
-  // This option defines software prefetching behaviour during output
+  // This option defines software pre-fetching behaviour during output
   // string generation in each step (collision groups processing). We
   // linearly go thru source string indices in an array and produce
   // output strings. We know which strings are to be needed in the
   // future because we have their indices in the array we iterate
-  // thru, so we can try to prefetch them. The follwing number defines
+  // thru, so we can try to prefetch them. The following number defines
   // a distance of the prefetch (in number of strings).
   static constexpr u64 kPrefetchDistance = 16;
-  // Bytes allocated per one string for the whole algoritm run. This
-  // memory is maanged by a space allocator which allows to reallocate
+  // Bytes allocated per one string for the whole algorithm run. This
+  // memory is managed by a space allocator which allows to reallocate
   // memory blocks to different data structure quite cheaply. This
   // value is used if `kExpandHashes` == true.
   static constexpr u64 kMemoryForExpandedProblem = 76ul;
@@ -201,7 +201,7 @@ struct Const {
   // performing parts.
   static constexpr bool kReportSteps = false;
   // Dump allocation of memory blocks managed by space allocator
-  // whenever some alloction changes.
+  // whenever some allocation changes.
   static constexpr bool kReportMemoryAllocation = false;
   // Don't generate full set of 2^X strings but generate strings
   // forming exactly one solution (512 strings colliding in perfect
@@ -219,7 +219,7 @@ struct Const {
   static constexpr u32 kTestSetExpandMultiplier = 1;
 
   // ---
-  // Derived constants - cannot be chnaged manually.
+  // Derived constants - cannot be changed manually.
   // ---
   //
   // Bitwise mask for reading bucket number from hash segment.
