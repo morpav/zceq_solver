@@ -34,11 +34,20 @@ void Solver::Reset(Inputs& inputs) {
 
 void Solver::Reset(const u8* data, u64 length) {
   assert(data != nullptr);
+  assert(length == 140);
   ResetTimer();
   ResetMemoryAllocator();
   ClearSolutions();
 
-  blake.Precompute(data, length);
+  auto address = (u64)data;
+  bool aligned = (address & ~31) == 0;
+  if (aligned) {
+    blake.Precompute(data, length);
+  } else {
+    alignas(32) u8 aligned_copy[140];
+    memcpy(aligned_copy, data, 140);
+    blake.Precompute(aligned_copy, length);
+  }
   initialized_ = true;
 };
 

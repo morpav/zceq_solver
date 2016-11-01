@@ -185,7 +185,7 @@ class alignas(32) Blake2b {
   static_assert(sizeof(SecondBlock) == 128, "sizeof(SecondBlock) != 128");
 
   State prepared_state_;
-  BlakeBatchBackend* batch_backend_;
+  BlakeBatchBackend* batch_backend_ = nullptr;
   bool prepared_ = false;
 };
 
@@ -326,9 +326,11 @@ inline Blake2b::Blake2b() {
       blake2b_compress = blake2b_compress_ref;
   }
 
-  // Don't use batch implementation (mostly useful for profilin only).
-  if (!RunTimeConfig.kAllowBlake2bInBatches)
+  // Don't use batch implementation (mostly useful for profiling only).
+  if (!RunTimeConfig.kAllowBlake2bInBatches) {
+    batch_backend_ = nullptr;
     return;
+  }
 
   // Pick best implementation for batch blake2b.
   {
