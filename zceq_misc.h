@@ -99,8 +99,8 @@ inline range_<T> range(T begin, T end) {
 }
 
 static inline void XOR(u8* __restrict target,
-                       u8* __restrict source1,
-                       u8* __restrict source2, u64 length) {
+                       const u8* __restrict source1,
+                       const u8* __restrict source2, u64 length) {
   // Force(help) compiler to generate optimal, branch-less XOR instructions.
   for (auto i = 0; i < (length / 8); i++) {
     ((u64*)target)[i] = ((u64*)source1)[i] ^ ((u64*)source2)[i];
@@ -122,29 +122,47 @@ static inline void XOR(u8* __restrict target,
   }
 }
 
-// __attribute__((noinline))
-static void ReorderBitsInHash(const u8* __restrict hash_,
-                              u8* __restrict array_) {
-  auto hash = (u64*)hash_;
-  auto array = (u64*)array_;
+template<u32 bytes_skipped>
+static inline void ReorderBitsInHash(const u8* __restrict hash_,
+                                     u8* __restrict array_) {
+  static_assert(bytes_skipped == 0 || bytes_skipped == 1, "Unsupported value");
+  if (bytes_skipped == 0) {
+    auto hash = (u64*) hash_;
+    auto array = (u64*) array_;
 
-  array[0] = ((hash[0] & 0x00ffffffff00ffff)) |
-             ((hash[0] & 0xf000000000f00000) >> 4) |
-             ((hash[0] & 0x0f000000000f0000) << 4);
+    array[0] = ((hash[0] & 0x00ffffffff00ffff)) |
+               ((hash[0] & 0xf000000000f00000) >> 4) |
+               ((hash[0] & 0x0f000000000f0000) << 4);
 
-  array[1] = ((hash[1] & 0xffffff00ffffffff)) |
-             ((hash[1] & 0x000000f000000000) >> 4) |
-             ((hash[1] & 0x0000000f00000000) << 4);
+    array[1] = ((hash[1] & 0xffffff00ffffffff)) |
+               ((hash[1] & 0x000000f000000000) >> 4) |
+               ((hash[1] & 0x0000000f00000000) << 4);
 
-  array[2] = ((hash[2] & 0xff00ffffffff00ff)) |
-             ((hash[2] & 0x00f000000000f000) >> 4) |
-             ((hash[2] & 0x000f000000000f00) << 4);
+    array[2] = ((hash[2] & 0xff00ffffffff00ff)) |
+               ((hash[2] & 0x00f000000000f000) >> 4) |
+               ((hash[2] & 0x000f000000000f00) << 4);
 
-  // Handle the last byte.
-  // We intentionally copy a whole qword because compiler can vectorize
-  // the computation then (32B vs 25B).
-  array[3] = hash[3];
-  // *(u8*)&array[3] = *(u8*)&hash[3];
+    // Handle the last byte.
+    // We intentionally copy a whole qword because compiler can vectorize
+    // the computation then (using 32B vs 25B).
+    array[3] = hash[3];
+    // *(u8*)&array[3] = *(u8*)&hash[3];
+  } else {
+    auto hash = (u64*)(hash_ + 1);
+    auto array = (u64*)array_;
+
+    array[0] = ((hash[0] & 0xff00ffffffff00ff)) |
+               ((hash[0] & 0x00f000000000f000) >> 4) |
+               ((hash[0] & 0x000f000000000f00) << 4);
+
+    array[1] = ((hash[1] & 0xffffffff00ffffff)) |
+               ((hash[1] & 0x00000000f0000000) >> 4) |
+               ((hash[1] & 0x000000000f000000) << 4);
+
+    array[2] = ((hash[2] & 0xffff00ffffffff00)) |
+               ((hash[2] & 0x0000f000000000f0) >> 4) |
+               ((hash[2] & 0x00000f000000000f) << 4);
+  }
 }
 
 class Random {

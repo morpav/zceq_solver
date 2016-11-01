@@ -80,7 +80,8 @@ void Solver::GenerateOTString(u32 index, OneTimeString& result)
 
   // Expand into the given string from segment 0.
   static_assert(OneTimeString::has_expanded_hash, "");
-  ExpandArrayFast(relevant_part, result.GetRawData(0));
+  static_assert(OneTimeString::bits_skipped == 0, "");
+  ExpandArrayFast(relevant_part, result.GetFirstSegmentAddr());
   result.SetIndex(index);
 }
 
@@ -88,11 +89,12 @@ void Solver::GenerateOTStringTest(u32 index, OneTimeString& result)
 {
   Random r;
   result.SetIndex(index);
-  for (auto segment : range(9)) {
-    result.SetSegment(segment, GetTestSegmentValue(index, segment, r));
+  result.SetFirstSegment(GetTestSegmentValue(index, 0, r));
+  for (auto segment : range(1, 9)) {
+    result.SetOtherSegment(segment, GetTestSegmentValue(index, segment, r));
   }
   // 10th segment is same for all strings
-  result.SetSegment(9, 0x77777777 & Const::kHashSegmentBitMask);
+  result.SetOtherSegment(9, 0x77777777 & Const::kHashSegmentBitMask);
 }
 
 inline void GenerateHashR(Random& r, unsigned char* hash, size_t hLen) {
@@ -119,16 +121,19 @@ void Solver::GenerateXStringsTest(
     auto position = buckets->counter[bucket]++;
     auto row = &output[position];
     row->SetIndex(i);
-    row->SetSegment(0, segment_0);
+    row->SetFirstSegment(segment_0);
     for (u32 segment = 1; segment < 9; segment++) {
-      row->SetSegment(segment, GetTestSegmentValue(i, segment, r));
+      row->SetOtherSegment(segment, GetTestSegmentValue(i, segment, r));
     }
     // 10th segment is same for all strings
-    row->SetSegment(9, 0x77777777 & Const::kHashSegmentBitMask);
+    row->SetOtherSegment(9, 0x77777777 & Const::kHashSegmentBitMask);
     if (i % Const::kTestSetExpandMultiplier == 0) {
       GenerateOTStringTest(i, temp);
-      for (u32 segment : range(10u)) {
-        assert(row->GetCleanSegment(segment) == temp.GetCleanSegment(segment));
+      assert(row->GetFirstSegmentClean() ==
+             ((temp.GetFirstSegmentClean() >> GeneratedString::bits_skipped)
+                 << GeneratedString::bits_skipped));
+      for (u32 segment : range(1u, 10u)) {
+        assert(row->GetOtherSegmentClean(segment) == temp.GetOtherSegmentClean(segment));
       }
     }
   }
@@ -140,6 +145,7 @@ void Solver::GenerateXStrings(
   GeneratedString* output = target_space->As<GeneratedString>();
 
   constexpr i32 half_hash_length = Const::N_parameter / 8;
+  constexpr auto bytes_skipped = GeneratedString::bytes_skipped;
   alignas(32) State blake_result;
   u32 string_index = 0;
   for (u32 g = 0; g < (Const::kInitialStringSetSize / 2); ++g) {
@@ -151,18 +157,22 @@ void Solver::GenerateXStrings(
     auto row = &output[position];
     row->SetIndex(string_index++);
     if (!GeneratedString::has_expanded_hash)
-      ReorderBitsInHash(blake_result.hash, row->GetRawData(0));
+      ReorderBitsInHash<bytes_skipped>(blake_result.hash,
+                                       row->GetFirstSegmentAddr());
     else
-      ExpandArrayFast(blake_result.hash, row->GetRawData(0));
+      ExpandArrayFast(blake_result.hash,
+                      row->GetFirstSegmentAddr());
 
     bucket = ComputeBucketFromHash(blake_result.hash + half_hash_length);
     position = buckets->counter[bucket]++;
     row = &output[position];
     row->SetIndex(string_index++);
     if (!GeneratedString::has_expanded_hash)
-      ReorderBitsInHash(blake_result.hash + half_hash_length, row->GetRawData(0));
+      ReorderBitsInHash<bytes_skipped>(blake_result.hash + half_hash_length,
+                                       row->GetFirstSegmentAddr());
     else
-      ExpandArrayFast(blake_result.hash + half_hash_length, row->GetRawData(0));
+      ExpandArrayFast(blake_result.hash + half_hash_length,
+                      row->GetFirstSegmentAddr());
   }
   assert(string_index == Const::kInitialStringSetSize);
   ReportStep("Generated strings (Blake2b)");
@@ -177,6 +187,7 @@ void Solver::GenerateXStringsBatch(
   assert(batch_size == blake.GetBatchSize());
 
   constexpr i32 half_hash_length = Const::N_parameter / 8;
+  constexpr auto bytes_skipped = GeneratedString::bytes_skipped;
   auto blake_result = blake.GetHashOutputMemory();
   u32 string_index = 0;
   for (u32 g = 0; g < (Const::kInitialStringSetSize / 2); g += batch_size) {
@@ -192,18 +203,21 @@ void Solver::GenerateXStringsBatch(
       auto row = &output[position];
       row->SetIndex(string_index++);
       if (!GeneratedString::has_expanded_hash)
-        ReorderBitsInHash(hash8, row->GetRawData(0));
+        ReorderBitsInHash<bytes_skipped>(hash8,
+                                         row->GetFirstSegmentAddr());
       else
-        ExpandArrayFast(hash8, row->GetRawData(0));
+        ExpandArrayFast(hash8, row->GetFirstSegmentAddr());
 
       bucket = ComputeBucketFromHash(hash8 + half_hash_length);
       position = buckets->counter[bucket]++;
       row = &output[position];
       row->SetIndex(string_index++);
       if (!GeneratedString::has_expanded_hash)
-        ReorderBitsInHash(hash8 + half_hash_length, row->GetRawData(0));
+        ReorderBitsInHash<bytes_skipped>(hash8 + half_hash_length,
+                                         row->GetFirstSegmentAddr());
       else
-        ExpandArrayFast(hash8 + half_hash_length, row->GetRawData(0));
+        ExpandArrayFast(hash8 + half_hash_length,
+                        row->GetFirstSegmentAddr());
     }
   }
   assert(string_index == Const::kInitialStringSetSize);
@@ -275,7 +289,7 @@ bool ReductionStep<C,S>::Execute(Context* context,
       int actual_items = in_buckets->partition_sizes[in_bucket][inner_partition];
       auto ProcessOneRow = [&]() {
         auto idx = Const::kHashTableMask &
-                   (in_rows[i].GetRawHash() >> Const::kBucketCountBits);
+                   (in_rows[i].GetFirstSegmentRaw() >> Const::kBucketCountBits);
         if (InString::segments_reduced < Const::kUseTemporaryHashArrayBeforeStep)
           hash[i] = idx;
         count[idx]++;
@@ -344,7 +358,8 @@ bool ReductionStep<C,S>::Execute(Context* context,
         if (InString::segments_reduced < Const::kUseTemporaryHashArrayBeforeStep)
           idx = hash[i];
         else
-          idx = Const::kHashTableMask & (in_rows[i].GetRawHash() >> Const::kBucketCountBits);
+          idx = Const::kHashTableMask &
+              (in_rows[i].GetFirstSegmentRaw() >> Const::kBucketCountBits);
         // Use branch-less version of code. We always rewrite collisions[0]
         // when the i-th string is not part of any valid collision
         // (cum_sum[hash[i]] == 0). But the collisions[0] is therefore always hot
@@ -438,7 +453,7 @@ bool ReductionStep<C,S>::Execute(Context* context,
 }
 
 template<typename C, typename S>
-__attribute__((__always_inline__))
+__attribute__((always_inline))
 inline void ReductionStep<C,S>::OutputString(const InString* first, const InString* second,
                                              u16 first_index, u16 second_index,
                                              u32* counter, u32 in_bucket) {
@@ -447,7 +462,7 @@ inline void ReductionStep<C,S>::OutputString(const InString* first, const InStri
                 C::isFinal, "Invalid string generation");
   static_assert(InString::has_expanded_hash == OutString::has_expanded_hash,"");
   constexpr auto out_segments_reduced = OutString::segments_reduced;
-  auto out_hash_xor = first->GetSecondRawHash() ^ second->GetSecondRawHash();
+  auto out_hash_xor = first->GetSecondSegmentRaw() ^ second->GetSecondSegmentRaw();
   const auto out_bucket = out_hash_xor & Const::kBucketNumberMask;
 
   if (Const::kCheckBucketOverflow)
@@ -460,9 +475,9 @@ inline void ReductionStep<C,S>::OutputString(const InString* first, const InStri
   OutString& result = out_strings_[out_index];
 
   // Locate the interesting hash segments in source strings to start XOR there.
-  auto a = (u8*)first->GetRawDataConst(out_segments_reduced);
-  auto b = (u8*)second->GetRawDataConst(out_segments_reduced);
-  auto xor_result = (u8*)result.GetRawData(out_segments_reduced);
+  auto a = (u8*)first->GetOtherSegmentAddrConst(out_segments_reduced) + OutString::bytes_skipped;
+  auto b = (u8*)second->GetOtherSegmentAddrConst(out_segments_reduced) + OutString::bytes_skipped;
+  auto xor_result = (u8*)result.GetFirstSegmentAddr();
 
   // Make the xor aligned on selected number of bytes so that only
   // exactly allowed instructions can be used.
@@ -486,17 +501,17 @@ inline void ReductionStep<C,S>::OutputString(const InString* first, const InStri
 
   if (Const::kValidatePartialSolutions)
     solver_.ValidatePartialSolution(InString::segments_reduced,
-                                    first->GetLink(),
-                                    second->GetLink());
+                                    first->GetLink(), first_index,
+                                    second->GetLink(), second_index);
 };
 
 template<typename C, typename S>
-__attribute__((__always_inline__))
+__attribute__((always_inline))
 inline void ReductionStep<C,S>::GenerateSolution(const InString* first, const InString* second,
                                                  u16 first_index, u16 second_index,
                                                  u32* counter) {
-  auto first_final_csegment = first->GetFinalCollisionSegment();
-  if (first_final_csegment == second->GetFinalCollisionSegment()) {
+  auto first_final_csegment = first->GetFinalCollisionSegments();
+  if (first_final_csegment == second->GetFinalCollisionSegments()) {
 
     if (Const::kStep8FilterByLastSegment) {
       if (first_final_csegment == last_final_segment)
@@ -531,14 +546,17 @@ void inline ReductionStep<C,S>::OutputIndex(PairLink* target, PairLink link) {
     *target = link;
 }
 
-void Solver::ValidatePartialSolution(u32 level, PairLink link1,
-                                     PairLink link2) {
+void Solver::ValidatePartialSolution(u32 level,
+                                     PairLink link1, u32 link1_position,
+                                     PairLink link2, u32 link2_position) {
   // Make space for a new solution.
   if (solution_objects_.size() < valid_solutions_ + 1)
     solution_objects_.emplace_back(512);
 
   auto& solution = solution_objects_[valid_solutions_];
-  auto success = ExtractSolution(link1, 0, link2, 0, solution, level);
+  auto success = ExtractSolution(link1, link1_position,
+                                 link2, link2_position,
+                                 solution, level);
   if (!success) {
     if (level == 8) {
       fprintf(stderr, "Cannot extract partial solution\n");
@@ -692,7 +710,7 @@ i32 Solver::Run() {
   using Step8 = ReductionStep<FinalStepConfig<8>, Solver>;
   auto step8 = Step8{*this};
   space_X1->Resize<typename Step8::InString>();
-  space_X2->Reallocate<typename Step8::InString>(FA);
+  space_X2->Reallocate<typename Step8::OutString>(FA);
   step8.in_strings = space_X1;
   step8.out_strings = space_X2;
   step8.target_link_index = link_indices_[step8.segments_reduced]
@@ -796,8 +814,8 @@ bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
   auto l2 = l8_link2.Translate(link2_position);
   // We know that by design, first and second indices from the same pair link
   // cannot be the same. So only the other 4 cases must be checked.
-  if (l1.first == l2.first || l1.second == l2.second ||
-      l1.first == l2.second || l1.second == l2.first) {
+  if (link_level == 8 && (l1.first == l2.first || l1.second == l2.second ||
+      l1.first == l2.second || l1.second == l2.first)) {
     return false;
   }
 
@@ -934,17 +952,27 @@ bool Solver::RecomputeSolution(std::vector<u32>& solution,
       auto& x2 = xstrings[first + pair_distance];
       // Perform xor operation in place (xor second string into the first,
       // which can stay at the same index then).
-      XOR(x1.GetRawData(segment),
-          x1.GetRawData(segment),
-          x2.GetRawData(segment),
-          OneTimeString::hash_length - (Const::kHashSegmentBytes * segment));
-      // The i-th segment is supposed to be 0!
-      if (x1.GetCleanSegment(segment))
-        return false;
+      if (segment == 0) {
+        XOR(x1.GetFirstSegmentAddr(),
+            x1.GetFirstSegmentAddr(),
+            x2.GetFirstSegmentAddr(),
+            OneTimeString::hash_length - (Const::kHashSegmentBytes * segment));
+        // The i-th segment is supposed to be 0!
+        if (x1.GetFirstSegmentClean())
+          return false;
+      } else {
+        XOR(x1.GetOtherSegmentAddr(segment),
+            x1.GetOtherSegmentAddr(segment),
+            x2.GetOtherSegmentAddr(segment),
+            OneTimeString::hash_length - (Const::kHashSegmentBytes * segment));
+        // The i-th segment is supposed to be 0!
+        if (x1.GetOtherSegmentClean(segment))
+          return false;
+      }
     }
   }
   // The last segment of the final string must be 0 as well.
-  if (level == 8 && xstrings[0].GetCleanSegment(9) != 0u)
+  if (level == 8 && xstrings[0].GetOtherSegmentClean(9) != 0u)
     return false;
 
   return true;

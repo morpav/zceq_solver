@@ -112,39 +112,43 @@ class PairLink {
 using HSegment = u32;
 
 
-template<u32 segments_reduced_, bool expanded_hash>
+template<u32 segments_reduced_, bool expanded_hash, u32 skipped_bits>
 class alignas(Const::kXStringAlignment) XString {
   constexpr static u32 GetHashLength() {
     return (expanded_hash) ?
            (Const::kHashSegmentBytes *
                (Const::kTotalSegmentsCount - segments_reduced))
                            :
-           (((Const::kTotalHashBits -
-               (segments_reduced * Const::kHashSegmentBits)) + 7) / 8);
+           (((Const::kTotalHashBits - (segments_reduced * Const::kHashSegmentBits)
+             - skipped_bits) + 7) / 8);
   }
+  static_assert(!expanded_hash || skipped_bits == 0,
+                "Cannot skip bits with expanded strings, not implemented");
+  static_assert(skipped_bits == skipped_bits / 8 * 8,
+                "Cannot skip not whole bytes for now");
  public:
+  // Make the type parameters available for querying by users.
   constexpr static auto segments_reduced = segments_reduced_;
   constexpr static auto has_expanded_hash = expanded_hash;
   constexpr static u32 hash_length = GetHashLength();
+  constexpr static auto bits_skipped = skipped_bits;
+  constexpr static auto bytes_skipped = bits_skipped / 8;
 
  public:
-  // Returns raw u32 integer with least significant bits containing the requested
-  // segment. Higher bits can contain anything.
-  inline u32 GetRawSegment(u32 idx) const {
-    assert(ContainsSegment(idx));
-    auto raw_data = *(u32*)GetRawDataConst(idx);
-    auto shifted = raw_data >> GetSegmentShift(idx);
-    return shifted;
+  inline HSegment GetFirstSegmentClean() {
+    auto tmp = GetFirstSegmentRaw() & Const::kHashSegmentBitMask;
+    return tmp & ~((1u << bits_skipped) - 1);
   }
-  inline HSegment GetCleanSegment(u32 idx) {
-    return GetRawSegment(idx) & Const::kHashSegmentBitMask;
+  inline HSegment GetOtherSegmentClean(u32 segment) {
+    assert(!IsFirst(segment));
+    return GetOtherSegmentRaw(segment) & Const::kHashSegmentBitMask;
   }
-  inline HSegment GetRawHash() const {
+  inline HSegment GetFirstSegmentRaw() const {
     static_assert(Const::kHashSegmentBitMask == 0x000fffff, "Not 200,9?");
-    return GetRawSegment(segments_reduced_);
+    return (*(HSegment*)hash_bytes_ << bits_skipped) >> GetSegmentShift(segments_reduced);
   }
-  inline HSegment GetSecondRawHash() const {
-    return GetRawSegment(segments_reduced_ + 1);
+  inline HSegment GetSecondSegmentRaw() const {
+    return GetOtherSegmentRaw(segments_reduced_ + 1);
   }
   inline PairLink GetLink() const {
     return link_;
@@ -155,53 +159,83 @@ class alignas(Const::kXStringAlignment) XString {
   inline void SetIndex(u32 index_) {
     link_.SetSingleIndex(index_);
   }
-  static constexpr u32 GetSegmentShift(u32 segment) {
-    return (!expanded_hash && (segment % 2)) ? 4 : 0;
+  inline u8* GetFirstSegmentAddr() {
+    return hash_bytes_;
   }
-  inline const u8* GetRawDataConst(u32 from_segment) const {
+  inline const u8* GetOtherSegmentAddrConst(u32 from_segment) const {
     return const_cast<XString<segments_reduced_,
-        expanded_hash>*>(this)->GetRawData(from_segment);
+        expanded_hash, skipped_bits>*>(this)->GetOtherSegmentAddr(from_segment);
   }
   // Returns first byte with bits participating in the requested segment.
   // It can start from bit 0 or 4, depending on the segment.
-  inline u8* GetRawData(u32 from_segment) {
+  inline u8* GetOtherSegmentAddr(u32 from_segment) {
+    assert(!IsFirst(from_segment));
     assert(ContainsSegment(from_segment));
     if (expanded_hash)
       return hash_bytes_ + (Const::kHashSegmentBytes * (from_segment - segments_reduced));
     else {
       constexpr auto reduced_bytes = (Const::kHashSegmentBits * segments_reduced) / 8;
-      return hash_bytes_ + (Const::kHashSegmentBits * from_segment / 8) - reduced_bytes;
+      return hash_bytes_ + (Const::kHashSegmentBits * from_segment / 8)
+             - reduced_bytes - bytes_skipped;
     }
   }
-  inline void SetSegment(u32 segment, u32 hash_value) {
-    assert((~Const::kHashSegmentBitMask & hash_value) == 0);
 
-    auto raw = (u32*)GetRawData(segment);
+  inline void SetOtherSegment(u32 segment, u32 hash_value) {
+    assert(!IsFirst(segment));
+    assert((~Const::kHashSegmentBitMask & hash_value) == 0);
+    auto raw_addr = (u32*)GetOtherSegmentAddr(segment);
     auto shift = GetSegmentShift(segment);
-    *raw = (*raw & ~(Const::kHashSegmentBitMask << shift)) |
-           ((hash_value & Const::kHashSegmentBitMask) << shift);
-    assert(GetCleanSegment(segment) == hash_value);
+    *raw_addr = (*raw_addr & ~(Const::kHashSegmentBitMask << shift)) |
+                ((hash_value & Const::kHashSegmentBitMask) << shift);
+    assert(GetOtherSegmentClean(segment) == hash_value);
   }
-  inline u64 GetFinalCollisionSegment() const {
+  inline void SetFirstSegment(u32 hash_value) {
+    assert((~Const::kHashSegmentBitMask & hash_value) == 0);
+    auto raw_addr = (u32*)hash_bytes_;
+    auto shift = GetSegmentShift(segments_reduced);
+    if (bits_skipped) {
+      assert(bits_skipped > shift);
+      *raw_addr = (*raw_addr & ~(Const::kHashSegmentBitMask >> (bits_skipped - shift))) |
+          ((hash_value & Const::kHashSegmentBitMask) >> (bits_skipped - shift));
+    } else {
+      *raw_addr = (*raw_addr & ~(Const::kHashSegmentBitMask << shift)) |
+          ((hash_value & Const::kHashSegmentBitMask) << shift);
+    }
+    assert(GetFirstSegmentClean() == ((hash_value >> bits_skipped) << bits_skipped));
+  }
+  inline u64 GetFinalCollisionSegments() const {
     assert(segments_reduced == 8);
     // Take only the last two segments
-    u64 valid_bits = expanded_hash ? (Const::kHashSegmentBytes * 2 * 8) :
-                     Const::kHashSegmentBits * 2;
-    return *reinterpret_cast<const u64*>(hash_bytes_)
-           & ((1ul << valid_bits) - 1);
+    constexpr u64 valid_bits = expanded_hash ? (Const::kHashSegmentBytes * 2 * 8) :
+                     Const::kHashSegmentBits * 2 - bits_skipped;
+    return (*reinterpret_cast<const u64*>(hash_bytes_)
+           & ((1ul << valid_bits) - 1)) << bits_skipped;
   }
  protected:
   static constexpr bool ContainsSegment(u32 segment) {
     return segment >= segments_reduced && segment <= Const::kTotalSegmentsCount;
   }
-
+  static constexpr bool IsFirst(u32 segment) {
+    return segments_reduced == segment;
+  }
+  static constexpr u32 GetSegmentShift(u32 segment) {
+    return (!expanded_hash && (segment % 2)) ? 4 : 0;
+  }
+  // Returns raw u32 integer with least significant bits containing the requested
+  // segment. Higher bits can contain anything.
+  inline u32 GetOtherSegmentRaw(u32 segment) const {
+    auto raw_addr = GetOtherSegmentAddrConst(segment);
+    auto raw_data = *(u32*)raw_addr;
+    auto shifted = raw_data >> GetSegmentShift(segment);
+    return shifted;
+  }
   static_assert(segments_reduced <= Const::kTotalSegmentsCount, "");
 
  public:
   PairLink link_;
   u8 hash_bytes_[hash_length];
 
-  template<u32 p, bool exp_h>
+  template<u32 p, bool exp_h, u32 sb>
   friend class XString;
 };
 
@@ -230,8 +264,10 @@ template<u32 step_no>
 struct ReductionStepConfig {
   static constexpr bool isFinal = false;
 
-  using InString = XString<step_no, Const::kExpandHashes>;
-  using OutString = XString<step_no + 1, Const::kExpandHashes>;
+  using InString = XString<step_no, Const::kExpandHashes,
+      Const::kFirstSegmentBitsSkipped>;
+  using OutString = XString<step_no + 1, Const::kExpandHashes,
+      Const::kFirstSegmentBitsSkipped>;
 };
 
 template<u32 step_no>
@@ -240,8 +276,10 @@ struct FinalStepConfig : ReductionStepConfig<step_no> {
   // We need to select XString of such size that it is big enough to contain
   // SolutionCandidate object. The string is never used directly as a string
   // but we need the space.
-  using OutString = XString<8, Const::kExpandHashes>;
-  static_assert(sizeof(SolutionCandidate) <= sizeof(OutString), "");
+  using OutString = XString<8, false, 0>;
+  // Ideally there can be '==' here, if not possible in future, replace
+  // by '<='.
+  static_assert(sizeof(SolutionCandidate) == sizeof(OutString), "");
   static constexpr bool isFinal = true;
 };
 
@@ -376,7 +414,10 @@ class Solver {
  public:
   using Space = SpaceAllocator::Space;
 
-  using OneTimeString = XString<0, true>;
+  // Expanded, not reduced string with 0 skipped bits.
+  using OneTimeString = XString<0, true, 0>;
+  // String type which should be generated before first step. We simply
+  // reuse an input type specified for step 0.
   using GeneratedString = ReductionStepConfig<0>::InString;
 
   Solver();
@@ -420,8 +461,9 @@ class Solver {
   }
   void ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
                                 PairLink l8_link2, u32 link2_position);
-  void ValidatePartialSolution(u32 level, PairLink link1,
-                                PairLink link2);
+  void ValidatePartialSolution(u32 level,
+                               PairLink link1, u32 link1_position,
+                               PairLink link2, u32 link2_position);
   bool ExtractSolution(PairLink l8_link1, u32 link1_position,
                        PairLink l8_link2, u32 link2_position,
                        std::vector<u32>& result,

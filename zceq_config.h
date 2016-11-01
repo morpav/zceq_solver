@@ -148,6 +148,13 @@ struct Const {
   // Number of bits used for encoding a bucket. Directly defines number
   // of buckets used by the solver.
   static constexpr u64 kBucketCountBits = 8;
+  // Number of bits from string's first segment not stored in the strings.
+  // The bits are fully dependent on the string's position in some
+  // particular bucket so they are redundant. Currently the code support
+  // only bits aligned to whole bytes, and of course the parameter must be
+  // smaller or equal to number of bits identifying a bucket
+  // (`kBucketCountBits`).
+  static constexpr u64 kFirstSegmentBitsSkipped = 8;
   // Starting bit position for bucket information within pair link
   // index (u32). The rest bits are used for source strings
   // identification. Not necessarily all bucket bits can be stored
@@ -175,7 +182,8 @@ struct Const {
   // value is used if `kExpandHashes` == true.
   static constexpr u64 kMemoryForExpandedProblem = 76ul;
   // Bytes allocated per one string for `kExpandHashes` == false.
-  static constexpr u64 kMemoryForNonExpandedProblem = 68ul;
+  static constexpr u64 kMemoryForNonExpandedProblem =
+      68ul - (kFirstSegmentBitsSkipped ? 4 : 0);
 
   // ---
   // Debugging flags - should be always false if you're not debugging
