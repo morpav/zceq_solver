@@ -5,7 +5,8 @@ LD = clang++
 MARCH = native
 LLVM_PROFDATA = llvm-profdata-$(shell llvm-config --version | sed -e 's/\(.\..\)\../\1/g')
 
-CFLAGS += -fPIC
+CXXFLAGS += -std=c++11 -march=$(MARCH) -O3 -DNDEBUG -fPIC
+CFLAGS += -std=c99 -march=$(MARCH) -O3 -DNDEBUG -fPIC
 
 ifeq ($(NOPROFILING), 1)
 ifeq ($(USE_PROFILE_DATA), 1)
@@ -25,8 +26,6 @@ CXXFLAGS += $(gen_profile_data_flags)
 LDFLAGS += $(gen_profile_data_flags)
 build_dir = build-profiling
 endif
-
-CXXFLAGS += -std=c++11 -march=$(MARCH) -O3 -DNDEBUG
 
 objs := zceq_solver.o \
 	zceq_blake2b.o \
@@ -72,7 +71,7 @@ $(build_dir)/libsolver.so: $(addprefix $(build_dir)/,$(shared_lib_objs) $(blake2
 	$(LD) $(LDFLAGS) $(shared_lib_ldflags) -o $@ $^ $(asm_objs)
 
 $(build_dir)/%.o: %.cpp | $(build_dir) $(profile_data)
-	$(CXX) $(CXXFLAGS) $(CFLAGS) -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 $(build_dir)/%.o: blake2/%.c | $(build_dir)
 	$(CC) $(CFLAGS) -o $@ -c $^
