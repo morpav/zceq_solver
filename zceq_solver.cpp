@@ -49,7 +49,7 @@ void Solver::Reset(const u8* data, u64 length) {
     blake.Precompute(aligned_copy, length);
   }
   initialized_ = true;
-};
+}
 
 void Solver::ResetMemoryAllocator() {
   allocator_.Reset();
@@ -77,7 +77,7 @@ static u32 GetTestSegmentValue(int i, int s, Random& r) {
   } else {
     return r.Next() & Const::kHashSegmentBitMask;
   }
-};
+}
 
 void Solver::GenerateOTString(u32 index, OneTimeString& result)
 {
@@ -124,7 +124,7 @@ void Solver::GenerateXStringsTest(
   GeneratedString* output = target_space->As<GeneratedString>();
 
   OneTimeString temp;
-  for (auto i : range(512 * Const::kTestSetExpandMultiplier)) {
+  for (auto i : range(Const::kSolutionSize * Const::kTestSetExpandMultiplier)) {
     auto segment_0 = GetTestSegmentValue(i, 0, r);
     auto bucket = segment_0 & Const::kBucketNumberMask;
     auto position = buckets->counter[bucket]++;
@@ -143,6 +143,8 @@ void Solver::GenerateXStringsTest(
                  << GeneratedString::bits_skipped));
       for (u32 segment : range(1u, 10u)) {
         assert(row->GetOtherSegmentClean(segment) == temp.GetOtherSegmentClean(segment));
+        // Prevent warning when assert is noop.
+        (void)segment;
       }
     }
   }
@@ -241,7 +243,7 @@ bool ReductionStep<C,T>::PrepareRTConfiguration() {
   in_strings_ = in_strings->As<InString>();
   out_strings_ = out_strings->As<OutString>();
   return true;
-};
+}
 
 template<typename C, typename S>
 bool ReductionStep<C,S>::Execute(Context* context,
@@ -512,7 +514,7 @@ inline void ReductionStep<C,S>::OutputString(const InString* first, const InStri
     solver_.ValidatePartialSolution(InString::segments_reduced,
                                     first->GetLink(), first_index,
                                     second->GetLink(), second_index);
-};
+}
 
 template<typename C, typename S>
 __attribute__((always_inline))
@@ -544,7 +546,7 @@ inline void ReductionStep<C,S>::GenerateSolution(const InString* first, const In
       result.link2_position_mod_bucket_size = (u16)(second_index % Const::kItemsInBucket);
     }
   }
-};
+}
 
 
 template<typename C, typename S>
@@ -560,7 +562,7 @@ void Solver::ValidatePartialSolution(u32 level,
                                      PairLink link2, u32 link2_position) {
   // Make space for a new solution.
   if (solution_objects_.size() < valid_solutions_ + 1)
-    solution_objects_.emplace_back(512);
+    solution_objects_.emplace_back(Const::kSolutionSize);
 
   auto& solution = solution_objects_[valid_solutions_];
   auto success = ExtractSolution(link1, link1_position,
@@ -787,7 +789,7 @@ void Solver::ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
                                       PairLink l8_link2, u32 link2_position) {
   // Make space for a new solution.
   if (solution_objects_.size() < valid_solutions_ + 1)
-    solution_objects_.emplace_back(512);
+    solution_objects_.emplace_back(Const::kSolutionSize);
 
   auto& solution = solution_objects_[valid_solutions_];
   auto success = ExtractSolution(l8_link1, link1_position,
@@ -915,9 +917,9 @@ u32 Solver::ReorderSolution(std::vector<u32>& solution) {
   };
   u32 swap_count = 0;
   auto data = solution.data();
-  for (u32 length = 1; length <= 256; length *= 2) {
+  for (u32 length = 1; length <= Const::kSolutionSize / 2; length *= 2) {
     u32 step = length * 2;
-    for (u32 start = 0; start < 512; start += step) {
+    for (u32 start = 0; start < Const::kSolutionSize; start += step) {
       if (data[start] >= data[start+length]) {
         swap(&data[start], &data[start + length], length);
         swap_count++;
@@ -936,11 +938,11 @@ bool Solver::RecomputeSolution(std::vector<u32>& solution, u32 level,
   }
 
   auto solution_size = 2 * (1u << level);
-
+  assert(solution_size <= Const::kSolutionSize);
   if (solution.size() != solution_size)
     return false;
 
-  OneTimeString xstrings[solution_size];
+  OneTimeString xstrings[Const::kSolutionSize];
 
   if (check_uniqueness) {
     temporary_solution_.resize(solution_size);
@@ -998,7 +1000,7 @@ bool Solver::RecomputeSolution(std::vector<u32>& solution, u32 level,
     return false;
 
   return true;
-};
+}
 
 template<typename C, typename S>
 void ReductionStep<C,S>::ReportCollisionStructure(std::vector<u32>& collisions, u32 string_count) {
@@ -1008,13 +1010,13 @@ void ReductionStep<C,S>::ReportCollisionStructure(std::vector<u32>& collisions, 
     if (collisions[i] > 0) {
       u32 combinations = (u32)(i * (i - 1) / 2);
       u32 pairs = collisions[i] * combinations;
-      printf("%3ld: %8d = %d collisions * %d (%ld) combinations\n", i, pairs, collisions[i], combinations, i-1);
+      printf("%3" PRId64 ": %8d = %d collisions * %d (%" PRId64 ") combinations\n", i, pairs, collisions[i], combinations, i-1);
       total_pairs += pairs;
       total_collisions += collisions[i];
     }
   }
-  printf("total pairs: %ld (%ld) from %ld collisions (%d strings)\n",
-         total_pairs, (i64)total_pairs - (i64)string_count,
+  printf("total pairs: %" PRId64 " (%" PRId64 ") from %" PRId64 " collisions (%d strings)\n",
+         total_pairs, total_pairs - string_count,
          total_collisions, string_count);
 }
 
@@ -1025,7 +1027,7 @@ static inline u64 now() {
 
 void Solver::ResetTimer() {
   timer_start_ = major_start_ = last_report_ = now();
-};
+}
 
 
 void Solver::ReportStep(const char* name, bool major) {
@@ -1033,15 +1035,15 @@ void Solver::ReportStep(const char* name, bool major) {
     return;
   auto time = now();
   if (name && print_reports_) {
-    printf("[ %7ld %6ld ] %s\n", time - major_start_,time - last_report_,
+    printf("[ %7" PRId64 " %6" PRId64 " ] %s\n", time - major_start_,time - last_report_,
            name);
   }
   if (major) {
     if (print_reports_)
-      printf("[ %7ld        ] # ***\n", time - timer_start_);
+      printf("[ %7" PRId64 "        ] # ***\n", time - timer_start_);
     major_start_ = time;
   }
   last_report_ = time;
-};
+}
 
 }  // namespace zceq_solver

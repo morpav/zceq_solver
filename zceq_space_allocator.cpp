@@ -38,7 +38,6 @@ SpaceAllocator::Allocate(Space* space, u32 place, u32 size) {
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     flags |= MAP_HUGETLB;
     auto size = slot_count_ * slot_size_;
-    // size = (size + 4095) / 4096 * 4096;
     auto result = mmap(nullptr, size, protection, flags, -1, 0);
     if (result == MAP_FAILED) {
       flags &= ~(MAP_HUGETLB);
@@ -97,7 +96,7 @@ SpaceAllocator::Allocate(Space* space, u32 place, u32 size) {
 }
 
 u32 SpaceAllocator::FindFirstAvailable(u32 size) {
-  int count = 0;
+  u32 count = 0;
   for (auto i : range(slot_count_)) {
     if (slot_states_[i] != nullptr)
       count = 0;
@@ -177,18 +176,8 @@ void for_same_space(SpaceAllocator::Space*const* begin,
   }
   call(partition_begin, begin);
 }
-/*
-template<typename Iter, typename Callable, typename Comparator=std::equal_to<Iter>>
-void for_same(Iter begin, Iter end, Callable call) {
-  Comparator equal_to;
-  for_same(begin, end, call, equal_to);
-}*/
 
 void SpaceAllocator::DumpState(const char* message) const {
-  // printf("%3d >> ", time_);
-  Space* last = nullptr;
-
-  using iter = vector<const Space*>::const_iterator;
   for_same_space(&slot_states_[0],
                  &slot_states_[slot_states_.size()],
            [](SpaceAllocator::Space*const*  beg, SpaceAllocator::Space*const*  end) {
@@ -196,6 +185,7 @@ void SpaceAllocator::DumpState(const char* message) const {
              auto space = *beg;
              if (!space) {
                for (auto i : range(end - beg)) {
+                 (void)i;
                  printf(" ");
                }
              } else {
@@ -204,16 +194,19 @@ void SpaceAllocator::DumpState(const char* message) const {
                else if (space->size_ == 2)
                  printf("[]");
                else {
-                 char buffer[20];
                  auto used = std::min((u32)space->name_.size(), space->size_ - 2);
                  auto left_ws = (space->size_ - used - 2) / 2;
                  auto right_ws = space->size_ - used - 2 - left_ws;
                  printf("[");
-                 for (auto i : range(left_ws))
+                 for (auto i : range(left_ws)) {
+                   (void)i;
                    printf(".");
+                 }
                  printf("%.*s", used, space->name_.c_str());
-                 for (auto i : range(right_ws))
+                 for (auto i : range(right_ws)) {
+                   (void)i;
                    printf(".");
+                 }
                  printf("]");
                }
              }

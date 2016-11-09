@@ -71,6 +71,7 @@ static inline void AddMessageSSE2(XWord& output, XWord input, const XWord* messa
 
 __attribute__((target("avx2")))
 __attribute__((always_inline))
+__attribute__((unused))
 static inline YWord Broadcast64(u64 value) {
   return _mm256_broadcastq_epi64(*(XWord*)&value);
 }

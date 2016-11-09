@@ -2,7 +2,7 @@
 #ifndef ZCEQ_MISC_H_
 #define ZCEQ_MISC_H_
 
-#include <cstdint>
+#include <cinttypes>
 #include <cstring>
 #include <chrono>
 #include <functional>
@@ -16,14 +16,14 @@ void __attribute__((weak)) AsmMarker() {}
 
 namespace zceq_solver {
 
-using i8 = int8_t;
-using i16 = int16_t;
-using i32 = int32_t;
-using i64 = int64_t;
-using u64 = uint64_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u8 = uint8_t;
+using i8 = std::int8_t;
+using i16 = std::int16_t;
+using i32 = std::int32_t;
+using i64 = std::int64_t;
+using u64 = std::uint64_t;
+using u16 = std::uint16_t;
+using u32 = std::uint32_t;
+using u8 = std::uint8_t;
 
 class ScopeTimer {
  public:
@@ -102,7 +102,7 @@ static inline void XOR(u8* __restrict target,
                        const u8* __restrict source1,
                        const u8* __restrict source2, u64 length) {
   // Force(help) compiler to generate optimal, branch-less XOR instructions.
-  for (auto i = 0; i < (length / 8); i++) {
+  for (auto i = 0u; i < (length / 8); i++) {
     ((u64*)target)[i] = ((u64*)source1)[i] ^ ((u64*)source2)[i];
   }
   u64 shift = 0;

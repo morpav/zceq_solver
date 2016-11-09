@@ -178,7 +178,7 @@ void RunBenchmark(int iterations_count, int shift, bool profiling, bool warmup) 
     auto solutions = solver.GetSolutions();
     total_invalid_sols += solver.GetInvalidSolutionCount();
     assert(solutions.size() == solution_count);
-    printf("%2d solutions in %ldms (%d inv.)\n", solution_count, t.Micro() / 1000,
+    printf("%2d solutions in %" PRId64 " ms (%d inv.)\n", solution_count, t.Micro() / 1000,
            solver.GetInvalidSolutionCount());
     t.Reset();
 
@@ -197,7 +197,7 @@ void RunBenchmark(int iterations_count, int shift, bool profiling, bool warmup) 
   }
   if (!profiling) {
     printf("*******************************\n");
-    printf("Total %d solutions in %ld ms\n", total_solutions,
+    printf("Total %d solutions in %" PRId64 " ms\n", total_solutions,
            gt.Micro() / 1000);
   }
 }

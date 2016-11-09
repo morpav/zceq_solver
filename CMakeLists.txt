@@ -6,9 +6,9 @@ set(CMAKE_C_COMPILER "gcc")
 #set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_COMPILER "clang++")
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++11 -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++11 -Wall -pedantic -march=native")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++11 -march=native -fprofile-instr-generate=code.profraw")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++11 -march=native -fprofile-instr-use=code.profdata")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++11 -Wall -pedantic -march=native -fprofile-instr-use=code.profdata")
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -Wl,--no-export-dynamic")
 

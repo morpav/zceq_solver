@@ -38,7 +38,6 @@ int FindSolutions(ZcEquihashSolver* solver, HeaderAndNonce* inputs,
   s.Reset((const u8*)inputs->data, sizeof Inputs::data);
   ScopeTimer t;
   auto solution_count = s.Run();
-  // printf("zceq_solver::Solver::Run() finished in %ld us\n", t.Micro());
   auto sol_vector = s.GetSolutions();
   if (solution_count > 0) {
     max_solutions = std::min(max_solutions, solution_count);
@@ -47,7 +46,6 @@ int FindSolutions(ZcEquihashSolver* solver, HeaderAndNonce* inputs,
                             sol_vector[sol]->size(),
                             (u8*)solutions[sol].data,
                             sizeof solutions[sol].data);
-      // printf("reporting solution..\n");
     }
   }
   return solution_count;
@@ -59,9 +57,9 @@ int ValidateSolution(ZcEquihashSolver* solver, HeaderAndNonce* inputs, Solution*
   auto& s = solver->solver;
 
   s.Reset((const u8*)inputs->data, sizeof Inputs::data);
-  solver->temp_solution.resize(512);
+  solver->temp_solution.resize(Const::kSolutionSize);
   GetIndicesFromMinimal((const u8*)solution->data, sizeof solution->data,
-                        solver->temp_solution.data(), 512);
+                        solver->temp_solution.data(), Const::kSolutionSize);
 
   if (s.ValidateSolution(solver->temp_solution))
     return 1;
@@ -125,8 +123,7 @@ void RunBenchmark(long long nonce_start, int iterations) {
     inputs.SetSimpleNonce(nonce_start + iter);
     solver.Reset(inputs);
     auto solutions = solver.Run();
-    printf("%2d solutions in %ldms\n", solutions, t.Micro() / 1000);
-    // printf("\nInput processed (%ld us)\n\n\n", t.Micro());
+    printf("%2d solutions in %" PRId64 "ms\n", solutions, t.Micro() / 1000);
     total_solutions += solutions;
     if ((iter + 1) % 10 == 0) {
       auto iters_done = iter + 1;
@@ -142,7 +139,7 @@ void RunBenchmark(long long nonce_start, int iterations) {
   }
   solver.Reset(inputs);
   printf("*******************************\n");
-  printf("Total %d solutions in %ld ms\n", total_solutions, gt.Micro() / 1000);
+  printf("Total %d solutions in %" PRId64 " ms\n", total_solutions, gt.Micro() / 1000);
 }
 
 }

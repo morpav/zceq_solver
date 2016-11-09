@@ -85,7 +85,7 @@ class alignas(32) Blake2b {
 
   void Precompute(const u8* header_and_nonce, u64 length) {
     if (length != 140) {
-      fprintf(stderr, "Invalid block header length %ld (140 expected)\n", length);
+      fprintf(stderr, "Invalid block header length %" PRId64 " (140 expected)\n", length);
       abort();
     }
     memcpy(prepared_state_.hash, personalized_state, 8 * 8);
@@ -100,9 +100,9 @@ class alignas(32) Blake2b {
     prepared_state_.f[0] = -1ull;
     // Copy not already compressed part of the nonce to second block to be
     // compressed later.
-    memcpy(second_block_.nonce_end, header_and_nonce + 128, 12);
+    memcpy(second_block_.s.nonce_end, header_and_nonce + 128, 12);
     // Clear the reset of the second block.
-    memset(second_block_.zeros, 0, sizeof(second_block_.zeros));
+    memset(second_block_.s.zeros, 0, sizeof(second_block_.s.zeros));
 
     // Initialize batch computation if possible
     if (batch_backend_ != nullptr)
@@ -113,7 +113,7 @@ class alignas(32) Blake2b {
 
   inline void FinalizeInto(State& output, u32 g) {
     output = prepared_state_;
-    second_block_.g = g;
+    second_block_.s.g = g;
 
     // Use scalar version of compress
     CompressSingle(output, second_block_.all_data);
@@ -152,7 +152,7 @@ class alignas(32) Blake2b {
         // Copy the prepared state to local variable since it will be demaged
         // by the computation.
         State control_output = prepared_state_;
-        second_block_.g = g_start + vec;
+        second_block_.s.g = g_start + vec;
 
         blake2b_compress_ref((blake2b_state*) &control_output, second_block_.all_data);
         // Compress4(&control_output, (u64*)second_block_.all_data);
@@ -178,7 +178,7 @@ class alignas(32) Blake2b {
       u32 nonce_end[3];
       u32 g;
       u32 zeros[28];
-    };
+    } s;
     u8 all_data[128];
   } second_block_;
 

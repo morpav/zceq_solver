@@ -20,21 +20,20 @@ namespace zceq_solver {
 
 using BlakeState = crypto_generichash_blake2b_state;
 
-struct Inputs {
+union Inputs {
   u8 data[140];
+  struct {
+    u8 unused[132];
+    u64 nonce;
+  } s;
   void SetSimpleNonce(u64 nonce) {
-    *((u64*)&data[140 - 8]) = nonce;
+    s.nonce = nonce;
   }
 };
 
 class PairLink {
   u32 data_;
  public:
-#ifdef LINK_ORIGINALS
-  u32 orig_first;
-  u32 orig_second;
-  u32 orig_link_position;
-#endif
   struct Translated {
     u32 first;
     u32 second;
@@ -46,10 +45,6 @@ class PairLink {
   }
 
   inline void set(u32 larger, u32 smaller, u32 bucket) {
-#ifdef LINK_ORIGINALS
-    orig_first = smaller + bucket * Const::kItemsInBucket;
-    orig_second = larger + bucket * Const::kItemsInBucket;
-#endif
     assert(larger > smaller);
     auto indices = ((larger * (larger - 1) / 2) + smaller);
     assert(indices < Const::kMaxCompressedIndexValue);
@@ -58,10 +53,6 @@ class PairLink {
   }
   inline void SetSingleIndex(u32 single) {
     data_ = single;
-#ifdef LINK_ORIGINALS
-    orig_first = single;
-    orig_second = 0;
-#endif
   }
   inline void copy_nt(PairLink value) {
     static_assert(sizeof(i32) == sizeof *this, "Different size of pair link used for nt-store");
@@ -87,10 +78,6 @@ class PairLink {
         u32(Const::kItemsInBucket * bucket + smaller),
         u32(Const::kItemsInBucket * bucket + larger)
     };
-#ifdef LINK_ORIGINALS
-    assert(orig_first == result.first);
-    assert(orig_second == result.second);
-#endif
     return result;
   }
 
@@ -105,7 +92,8 @@ class PairLink {
   inline u32 GetData() {
     return data_;
   }
-};
+}
+__attribute__((packed));
 
 // Type alias for standalone representation of hash segment used
 // for collision search.
@@ -145,7 +133,7 @@ class alignas(Const::kXStringAlignment) XString {
   }
   inline HSegment GetFirstSegmentRaw() const {
     static_assert(Const::kHashSegmentBitMask == 0x000fffff, "Not 200,9?");
-    return (*(HSegment*)hash_bytes_ << bits_skipped) >> GetSegmentShift(segments_reduced);
+    return (hash_hsegment_ << bits_skipped) >> GetSegmentShift(segments_reduced);
   }
   inline HSegment GetSecondSegmentRaw() const {
     return GetOtherSegmentRaw(segments_reduced_ + 1);
@@ -208,8 +196,7 @@ class alignas(Const::kXStringAlignment) XString {
     // Take only the last two segments
     constexpr u64 valid_bits = expanded_hash ? (Const::kHashSegmentBytes * 2 * 8) :
                      Const::kHashSegmentBits * 2 - bits_skipped;
-    return (*reinterpret_cast<const u64*>(hash_bytes_)
-           & ((1ul << valid_bits) - 1)) << bits_skipped;
+    return (hash_u64_ & ((1ull << valid_bits) - 1)) << bits_skipped;
   }
  protected:
   static constexpr bool ContainsSegment(u32 segment) {
@@ -233,11 +220,16 @@ class alignas(Const::kXStringAlignment) XString {
 
  public:
   PairLink link_;
-  u8 hash_bytes_[hash_length];
+
+  union {
+    u8 hash_bytes_[hash_length];
+    HSegment hash_hsegment_;
+    u64 hash_u64_;
+  } __attribute__((packed));
 
   template<u32 p, bool exp_h, u32 sb>
   friend class XString;
-};
+} __attribute__((packed));
 
 // Last "string" with all segments reduced, holding only a solution candidate.
 // It must conform to a part of XString interface to allow generic code to
@@ -486,8 +478,8 @@ class Solver {
   u64 last_report_ = 0;
   SpaceAllocator allocator_;
   bool print_reports_ = true;
-  i32 valid_solutions_ = 0;
-  i32 invalid_solutions_ = 0;
+  u32 valid_solutions_ = 0;
+  u32 invalid_solutions_ = 0;
   std::vector<std::vector<u32>> solution_objects_;
   std::vector<const std::vector<u32>*> solutions_;
   std::vector<u32> temporary_solution_;

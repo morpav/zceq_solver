@@ -77,7 +77,7 @@ bool GetIndicesFromMinimal(const u8* minimal, u64 minimal_length,
   ExpandArray(minimal, minimal_size,
               array.data(), lenIndices, cBitLen+1, bytePad);
   int output_i = 0;
-  for (int i = 0; i < lenIndices; i += sizeof(u32)) {
+  for (unsigned i = 0; i < lenIndices; i += sizeof(u32)) {
     output[output_i++] = ArrayToEhIndex(array.data()+i);
   }
   return true;
@@ -136,7 +136,7 @@ bool GetMinimalFromIndices(const u32* indices, u64 indices_length, u8* output, u
   size_t minLen { (cBitLen+1)*lenIndices/(8*sizeof(u32)) };
   size_t bytePad { sizeof(u32) - ((cBitLen+1)+7)/8 };
   std::vector<unsigned char> array(lenIndices);
-  for (int i = 0; i < indices_length; i++) {
+  for (unsigned i = 0; i < indices_length; i++) {
     EhIndexToArray(indices[i], array.data()+(i*sizeof(u32)));
   }
   CompressArray(array.data(), lenIndices,

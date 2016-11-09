@@ -38,7 +38,7 @@ struct RTConfig {
 extern RTConfig RunTimeConfig;
 
 // Compile-time configuration of the solver.
-struct Const {
+namespace Const {
   // ---
   // Problem setup, these values are directly derived from equihash problem
   // definition (the zcash variant).
@@ -68,6 +68,8 @@ struct Const {
   static constexpr u32 kTotalSegmentsCount = (K_parameter + 1);
   // Number of initially generated strings.
   static constexpr u32 kInitialStringSetSize = 1u << (kHashSegmentBits + 1);
+  // Number of indices in a solution.
+  static constexpr u32 kSolutionSize = 1u << (kTotalSegmentsCount - 1);
 
   // ---
   // Algorithm parameters - they modify behaviour of the solver and
@@ -284,7 +286,7 @@ struct Const {
 		"Inconsistent partition vs. bucket configuration");
   static_assert((kItemsInOutPartition + 1) * kPartitionCount > kItemsInBucket,
 		"Inconsistent partition vs. bucket configuration");
-};
+}
 
 }  // namespace zceq_solver
 
