@@ -58,7 +58,7 @@ class Solver:
         self.solver_ = library.CreateSolver()
         self.header_ = ffi.new("HeaderAndNonce*")
         self.solutions_ = ffi.new("Solution[16]")
-        self.solution_to_check_ = ffi.new("Solution*")
+        self.minimal_tmp_ = ffi.new("Solution*")
         self.expanded_tmp_ = ffi.new("ExpandedSolution*")
 
     def __del__(self):
@@ -66,7 +66,7 @@ class Solver:
         library.DestroySolver(self.solver_);
         self.solver_ = None
         # cffi's cdata are collected automatically
-        self.header_ = self.solutions_ = self.solution_to_check_ = None
+        self.header_ = self.solutions_ = self.minimal_tmp_ = self.expanded_tmp_ = None
 
     def _ensure_library(self):
         # Try to load library from standard
@@ -88,27 +88,35 @@ class Solver:
     def validate_solution(self, block_header, solution):
         assert len(block_header) == 140
         assert len(solution) == 1344
-        self.solution_to_check_.data = solution
-        return library.ValidateSolution(self.solver_, self.header_, self.solution_to_check_);
+        self.header_.data = block_header
+        self.minimal_tmp_.data = solution
+        return library.ValidateSolution(self.solver_, self.header_, self.minimal_tmp_);
 
-    def list_to_minimal(self, expanded):
-        if isinstance(expanded, (list, tuple)):
-            assert len(expanded) == 512
-            minimal = ffi.new("Solution*")
-            tmp = self.expanded_tmp_
-            for i, idx in enumerate(expanded):
-                tmp.data[i] = idx
-            expanded = tmp
+    def list_to_minimal(self, solution):
+        assert isinstance(solution, (list, tuple))
+        assert len(solution) == 512
 
-        res = library.ExpandedToMinimal(minimal, expanded)
+        # Convert a list/tuple to an ExpandedSolution instance
+        data = self.expanded_tmp_.data
+        for i, idx in enumerate(solution):
+            data[i] = idx
+        # Convert expanded to minimal
+        res = library.ExpandedToMinimal(self.minimal_tmp_, self.expanded_tmp_)
         assert res
-        return minimal
+        # Return the relevant bytes
+        return bytes(ffi.buffer(self.minimal_tmp_))
 
     def minimal_to_list(self, minimal):
-        tmp = self.expanded_tmp_
-        res = library.MinimalToExpanded(tmp, minimal)
+        assert len(minimal) == 1344
+        # Convert bytes into a minimal solution
+        self.minimal_tmp_.data = minimal
+        # Convert minimal to expanded solution
+        res = library.MinimalToExpanded(self.expanded_tmp_, self.minimal_tmp_)
         assert res
-        result = [tmp.data[i] for i in range(512)]
+        # Convert expanded solution to a result python list
+        data = self.expanded_tmp_.data
+        result = [data[i] for i in range(512)]
         return result
+
 
 __all__ = ['Solver', 'load_library']

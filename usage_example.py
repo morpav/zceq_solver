@@ -1,5 +1,7 @@
+from __future__ import print_function
 from pyzceqsolver import Solver
 import string
+import sys
 
 s = Solver()
 
@@ -10,9 +12,11 @@ assert back == org_solution
 
 for character in string.printable:
     block_header = character * 140
+    if sys.version_info >= (3, 0):
+        block_header = bytes(block_header, 'ascii')
 
     n = s.find_solutions(block_header)
-    print n, 'solution(s) found for "%s"' % character
+    print(n, 'solution(s) found for "%s"' % character)
 
     for e in range(n):
         solution = s.get_solution(e)
@@ -23,8 +27,8 @@ for character in string.printable:
 
         result = s.validate_solution(block_header, solution)
         if result != 1:
-            print "Error: invalid solution (%d)" % result
+            print("Error: invalid solution (%d)" % result)
 
         result = s.validate_solution(block_header, solution[::-1])
         if result != 0:
-            print "Error: solution should be rejected (%d)" % result
+            print("Error: solution should be rejected (%d)" % result)
