@@ -441,10 +441,10 @@ class Solver {
     return invalid_solutions_;
   }
   bool ValidateSolution(std::vector<u32>& solution) {
-    return RecomputeSolution(solution, 8, true);
+    return RecomputeSolution(solution, 8, true, true);
   }
   bool RecomputeSolution(std::vector<u32>& solution) {
-    return RecomputeSolution(solution, 8, false);
+    return RecomputeSolution(solution, 8, false, false);
   }
 
  protected:
@@ -469,7 +469,8 @@ class Solver {
                        std::vector<u32>& result,
                        u32 link_level);
   u32 ReorderSolution(std::vector<u32>& solution);
-  bool RecomputeSolution(std::vector<u32>& solution, u32 level, bool check_ordering);
+  bool RecomputeSolution(std::vector<u32>& solution, u32 level,
+                         bool check_ordering, bool check_uniqueness);
   void ResetTimer();
 
   void ReportStep(const char* name, bool major = false);

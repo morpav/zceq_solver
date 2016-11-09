@@ -574,7 +574,7 @@ void Solver::ValidatePartialSolution(u32 level,
     }
   }
   // We don't care about swaps here since we don't try to produce a final solution.
-  if (!RecomputeSolution(solution, level, false)) {
+  if (!RecomputeSolution(solution, level, false, false)) {
     fprintf(stderr, "********** FATAL ERROR: Invalid PARTIAL solution!! **********\n");
     assert(false);
   }
@@ -799,7 +799,7 @@ void Solver::ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
   }
 
   if (Const::kRecomputeSolution) {
-    if (!RecomputeSolution(solution, 8, false)) {
+    if (!RecomputeSolution(solution, 8, false, false)) {
       fprintf(stderr,
               "********** FATAL ERROR: Invalid solution!! **********\n");
       invalid_solutions_++;
@@ -809,6 +809,19 @@ void Solver::ProcessSolutionCandidate(PairLink l8_link1, u32 link1_position,
   // Reorder the solution if it is valid
   ReorderSolution(solution);
   valid_solutions_++;
+}
+
+static bool CheckUniqueness(std::vector<u32>& solution) {
+  std::sort(solution.begin(), solution.end());
+  auto last = -1u;
+  for (auto idx : solution) {
+    if (idx == last) {
+      // Invalid solution
+      return false;
+    }
+    last = idx;
+  }
+  return true;
 }
 
 bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
@@ -889,16 +902,7 @@ bool Solver::ExtractSolution(PairLink l8_link1, u32 link1_position,
   }
 
   // Check uniqueness of all indices.
-  std::sort(temporary.begin(), temporary.end());
-  auto last = -1u;
-  for (auto idx : temporary) {
-    if (idx == last) {
-      // Invalid solution
-      return false;
-    }
-    last = idx;
-  }
-  return true;
+  return CheckUniqueness(temporary);
 }
 
 
@@ -924,8 +928,8 @@ u32 Solver::ReorderSolution(std::vector<u32>& solution) {
 }
 
 
-bool Solver::RecomputeSolution(std::vector<u32>& solution,
-                               u32 level, bool check_ordering) {
+bool Solver::RecomputeSolution(std::vector<u32>& solution, u32 level,
+                               bool check_ordering, bool check_uniqueness) {
   if (!initialized_) {
     fprintf(stderr, "Solver not initialized");
     return false;
@@ -937,6 +941,15 @@ bool Solver::RecomputeSolution(std::vector<u32>& solution,
     return false;
 
   OneTimeString xstrings[solution_size];
+
+  if (check_uniqueness) {
+    temporary_solution_.resize(solution_size);
+    memcpy(temporary_solution_.data(), solution.data(),
+           solution_size * sizeof *solution.data());
+    if (!CheckUniqueness(temporary_solution_))
+      return false;
+  }
+
   // Generate all strings from given indices
   for (auto i : range(solution.size())) {
     u32 string_index = solution[i];
