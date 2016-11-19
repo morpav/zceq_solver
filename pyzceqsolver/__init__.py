@@ -1,6 +1,6 @@
 from cffi import FFI
 import os.path
-import inspect
+import pkg_resources
 
 ffi = None
 library = None
@@ -37,17 +37,39 @@ bool MinimalToExpanded(ExpandedSolution* expanded, Solution* minimal);
 
 """
 
-def load_library(path=None):
+import logging
+
+log = logging.getLogger('{0}'.format(__name__))
+
+def get_library_filename(system_name):
+    library_name_map_fmt = {
+        'Linux': 'lib{}.so',
+        'Windows': '{}.dll',
+    }
+    try:
+        library_filename = library_name_map_fmt[system_name].format(
+            'zceq_solver_sh')
+    except KeyError as e:
+        msg = 'Unsupported system: {0}, cannot provide system specific ' \
+              'library name'.format(system_name)
+        raise Exception(msg)
+    return library_filename
+
+def load_library():
     global library, ffi
     assert library is None
-
     ffi = FFI()
     ffi.cdef(library_header)
-
-    if path is None:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'libzceq_solver_sh.so')
-    library = ffi.dlopen(path)
+    try:
+        library_filename = get_library_filename(platform.system())
+    except Exception as e:
+        log.error('Failed to get library filename: {}'.format(e))
+    else:
+        library_pathname = pkg_resources.resource_filename(__name__,
+                                                           library_filename)
+        library = ffi.dlopen(library_pathname)
     assert library is not None
+    log.info('Loaded shared library: {0}'.format(library_filename))
 
 
 class Solver:
