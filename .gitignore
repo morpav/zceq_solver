@@ -1,0 +1,7 @@
+.idea
+build*/
+*.so
+*.dll
+.sconsign.dblite
+.sconf_temp
+config.log
