@@ -51,6 +51,17 @@ builds final executable and shared library (in build-final).
 Run `make NOPROFILING=1` to skip the profiling build. You can switch
 to gcc then. (Profiling using gcc could be done too).
 
+### SCons
+
+Alternatively, the software can be build with scons.
+
+The scons build also supports cross building for windows (profiling is
+automatically disabled for this scenario). See ```scons -h``` for all
+local options.
+
+### Python Package
+
+
 
 ## Algorithm outline
 
