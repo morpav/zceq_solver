@@ -1,14 +1,20 @@
 """A setuptools based setup module.
 
 """
-
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 from setuptools.dist import Distribution
+import distutils.log
 
 # To use a consistent encoding
 from codecs import open
 import os
+import subprocess
+import pyzceqsolver
+import sys
+import platform
+
+from distutils.command.build import build
 
 def get_target_system_shared_library_name():
      """Helper function that scans command line arguments whether platform
@@ -57,7 +63,6 @@ def sconsbuild(command_subclass):
 
     def modified_finalize_options(self):
          orig_finalize_options(self)
-         library_file_name.plat_name = self.plat_name
 
     def modified_run(self):
          scons_opts_list = [s.strip() for s in self.scons_opts.split(',')]
@@ -144,6 +149,8 @@ setup(
      packages=find_packages(),
 
      eager_resources=['{0}/{1}'.format(package, library_filename)],
+     # setup requires cffi, since it already uses parts of this package
+     setup_requires=['cffi'],
      # List run-time dependencies here.  These will be installed by pip when
      # your project is installed. For an analysis of "install_requires" vs pip's
      # requirements files see:
