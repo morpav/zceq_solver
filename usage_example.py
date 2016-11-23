@@ -1,5 +1,5 @@
 from __future__ import print_function
-from pyzceqsolver import Solver
+from pyzceqsolver.solver import Solver
 import string
 import sys
 
