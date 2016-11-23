@@ -46,6 +46,9 @@ final_env = Environment(CROSS_PREFIX=GetOption('cross_prefix'),
                         MARCH=GetOption('march'),
                         CXX='clang++',
                         LD='clang++',
+                        # the project links with pre-built object
+                        # modules, scons doesn't like this unless we
+                        # tell it they are usable the same way
                         STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME=1)
 
 
@@ -53,7 +56,8 @@ final_env.Append(CCFLAGS=['-march=${MARCH}', '-O3',
                           '-Wall', '-Wno-deprecated-declarations'],
                  CFLAGS=['-std=gnu99'],
                  CPPDEFINES=['NDEBUG'],
-                 CXXFLAGS=['-std=c++11'])
+                 CXXFLAGS=['-std=c++11'],
+                 LINKFLAGS=['-static-libgcc', '-static-libstdc++'])
 
 env_replace_options = {}
 env_append_options = {}
@@ -95,7 +99,7 @@ profile_data_file = 'code.profdata'
 
 gen_profile_data_flags = '-fprofile-instr-generate=$VARIANT_DIR/{}'.format(profile_raw_file)
 use_profile_data_flags = profiling_env.subst('-fprofile-instr-use=$VARIANT_DIR/{}'.format(profile_data_file))
-profiling_env.Append(CPPDEFINES=['SHARED_LIB'],
+profiling_env.Append(CPPDEFINES=[],
                      LINKFLAGS=[gen_profile_data_flags],
                      CXXFLAGS=[gen_profile_data_flags],
                      PROFILE_RAW_FILE=profile_raw_file,
