@@ -1,5 +1,8 @@
 /* Copyright @ 2016 Pavel Moravec */
+#include "portable_endian.h"
+#ifndef __WINDOWS__
 #include <sys/mman.h>
+#endif
 #include "zceq_space_allocator.h"
 
 namespace zceq_solver {
@@ -28,6 +31,9 @@ SpaceAllocator::CreateSpace(std::string name, u32 place, u32 size) {
 SpaceAllocator::Space*
 SpaceAllocator::Allocate(Space* space, u32 place, u32 size) {
   if (memory_ == nullptr) {
+#ifdef __WINDOWS__
+    memory_ = (u8*)malloc(slot_count_ * slot_size_);
+#else
     int protection = PROT_READ | PROT_WRITE;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     flags |= MAP_HUGETLB;
@@ -41,9 +47,9 @@ SpaceAllocator::Allocate(Space* space, u32 place, u32 size) {
         fprintf(stderr, "error number: %d\n", errno);
         abort();
       }
-      // fprintf(stderr, "NOT using huge tables!\n");
     }
     memory_ = (u8*)result;
+#endif
   }
 
   if (space->IsUsed()) {
@@ -220,7 +226,11 @@ SpaceAllocator::~SpaceAllocator() {
     delete a;
 
   if (memory_) {
+#ifdef __WINDOWS__
+    free(memory_);
+#else
     munmap(memory_, slot_count_ * slot_size_);
+#endif
     memory_ = nullptr;
   }
 }
