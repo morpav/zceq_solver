@@ -214,7 +214,8 @@ static inline void G_sequence_SSSE3(const XWord* messages, XWord v[16]) {
 }
 
 template<u8 round, int shift>
-__attribute__((target("sse2")))
+// FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
+__attribute__((target("ssse3")))
 __attribute__((always_inline))
 static inline void G_sequence_SSE2(const XWord* messages, XWord v[16]) {
   const auto rotate16 = _mm_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
@@ -382,7 +383,8 @@ inline void Compress2IntSSSE3(const XWord msgs[2], const XWord state_init[8], XW
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
 
-__attribute__((target("sse2")))
+// FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
+__attribute__((target("ssse3")))
 inline void Compress2IntSSE2(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
   XWord v[16];
 
@@ -504,8 +506,11 @@ void IntrinsicsSSSE3::Finalize(u32 g_start) {
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
 
-__attribute__((target("sse2")))
+// FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
+__attribute__((target("ssse3")))
 void IntrinsicsSSE2::Finalize(u32 g_start) {
+  assert(false);
+
   // Fill g indices into the vectorized (transposed) block parts.
   for (auto i : range(kBatchSize))
     second_blockN_->dwords[1][2*i + 1] = g_start + i;

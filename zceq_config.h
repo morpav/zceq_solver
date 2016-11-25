@@ -16,7 +16,8 @@ struct InstructionSet {
   bool AVX1 = true;
   bool SSE41 = true;
   bool SSSE3 = true;
-  bool SSE2 = true;
+  // Temporarily disabled as not proper SSE2 batch implementation exists.
+  bool SSE2 = false;
 };
 
 // Configuration structure which can be altered during run-time.
