@@ -1,3 +1,4 @@
+#include "portable_endian.h"
 
 // Big-endian so that lexicographic array comparison is equivalent to integer
 // comparison
