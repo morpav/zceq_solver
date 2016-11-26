@@ -5,17 +5,18 @@ solver, particularly its "200,9" variant as currently used by
 Zcash. In addition, there is a python binding for using the solver from
 python.
 
-For building options and target support, please see "Future work"
-section. Currently, only Linux and x86-64 is supported (tested).
+For building options and target support, please see "Build"
+section. Currently, only Linux and x86-64 is supported (windows port
+is in progress).
 
 An intention of this README is to describe algorithmic and
 implementation approach of the contained solver and to help a reader
 to understand the code better. It expects that the user is already
 familiar with Equihash problem (generalized birthday paradox problem).
 
-Current performance of the solver is ~7 solutions/s on Intel(R)
-Core(TM) i5-4670K CPU @ 3.40GHz, which translates to roughly 270ms
-and average of 1.88 solutions for algorithm iteration (one nonce).
+Current performance of the solver is >7 solutions/s on Intel(R)
+Core(TM) i5-4670K CPU @ 3.40GHz, which translates to roughly 255ms and
+average of 1.87 solutions for algorithm iteration (one nonce).
 
 (For **binary builds**, please go to
 https://github.com/morpav/zceq_solver--bin).
@@ -38,6 +39,23 @@ Index:
 
 
 ## Build
+
+The solver works best when compiled with modern C++ compiler,
+particularly Clang v3.9.
+
+### With Docker
+
+The easies way how to build the solver is within a docker container,
+as provided by this project. Simply run
+
+```
+./build-docker-image.sh
+./build-docker.sh
+```
+
+The target directory for the build is build-final.
+
+### Without Docker
 
 The code has been compiled only on Linux by GCC and Clang
 compilers. We don't expact any particular issues with porting to
@@ -143,15 +161,15 @@ later. Here are the main steps:
    2.3) We iterate through the histogram and eliminate all segment
    values (collision groups) with number of strings smaller then 2 or
    higher then 13 (configurable). These strings cannot typically
-   produce a reasonable solution. For cases <2 it is obvious, there
+   produce a reasonable solution. It is obvious for cases <2, there
    cannot be a collision. For the higher sizes, the insight is
    following. Input data should not be distinguishable from random
    data (given that blake2b is a good hash function). It is highly
    improbable that more then 13 strings collide in a particular
    segment. But it happens in reality quite often when duplicate
    strings are involved in in some colliding strings
-   (transitively). Filtering collision groups greater then 13 tries to
-   filters invalid solutions early. It is a really cheap check as
+   (transitively). Filtering of collision groups greater then 13 tries
+   to filter invalid solutions early. It is a really cheap check as
    well.
 
    While eliminating collision groups of bad sizes, we calculate
@@ -182,14 +200,16 @@ later. Here are the main steps:
    computing then next histogram.
 
    2.6) When all buckets are processed, we can forget the input
-   strings and find collision for next semgent in the strings.
+   strings (start to reuse the occupied memory) and find collisions
+   for the next semgent in the strings.
 
- 4) If 8 segments has not been reduced yet, continue with step 2).
+ 3) If 8 segments has not been reduced yet, continue with step 2).
 
- 4) When collisions for 9th segment are found, we do not produce any
-    other strings, but we use information stored in the pair link
-    objects to track down the source strings. The translation is
-    pretty straightforward. The output is a list of 512 indices.
+ 4) When collisions for 9th segment are found by the same approach
+    already described, we do not produce any other strings, but we use
+    information stored in the pair link objects to track down the
+    source strings. The translation is pretty straightforward. The
+    output is a list of 512 indices.
 
  5) If the list contains any duplicate items, the solution candidate
     is rejected. Otherwise indices are reorder to conform to zcash
@@ -208,7 +228,7 @@ decisions. There is a strong tension between solution generality and
 exploiting every possible information to be faster.
 
 We tried to go the second way with allowing the code to be general in
-cases when a compiler can reduce a general case to efficient
+cases when a modern compiler can reduce a general case to efficient
 particular case in compile time.
 
 There are two main logical parts of the solver. A strings generator,
@@ -219,18 +239,66 @@ reduction of unnecessary work and efficient usage of CPU power.
 
 ### Blake2b
 
-The following ideas are used (not claiming originality)
+Initial string generation (blake2b execution) takes roughly 30%-40% of
+time spent in solving equihash problem (after all following
+optimizations). It is surprisingly large part of the whole
+computation. It is worth to make the hash computation as fast as possible.
 
-  -
+ - Excessive calls to 'compress'.
 
+   When one tries to use a reference implementation of blake2b then
+   the s
 
+   The single most computationally intensive part of blake2b hash
+   function is so called 'compress' function which updates an internal
+   hash state by a block of input data of size 128B. This if performed
+   for each input block one by one. Because the input size for zcash
+   equihash is 140B of block header + 4B to make generated strings
+   unique, 2 calls to 'compress' function are needed.
 
-#### Blake2b
+   The first block (128B) is the same for all 2^N hash computation. We
+   can reuse the internal state and call 'compress' only once per
+   output hash.
 
-TBD:
+   Reference implementation of blake2b hash function does call
+   compress twice per hash result even when the first block is
+   provided at the beginning only once for all output strings. Not
+   necessary data copying is performed too and it makes the
+   computation even slower. This is independent of used ISA
+   specialization.
 
- - Excessive calls to compress
- -
+schopny odhodlany sebevedomy
+
+ - Too complex 'compress' function for second input block.
+
+   The second block of input function is mostly empty - only first 16
+   bytes is non-empty (144B - 128B) and the rest is by definition set
+   to 0. By using this fact we can simplify implementation of the
+   compress function because we eliminate loading and adding of most
+   of the input data.
+
+   Similarly, we do not need all result bytes (only 50 from 64) so we
+   can eliminate further computation.
+
+ - Algorithmically inefficient compress in zcash context
+
+   All common implementations of blake2b hash function are constructed
+   for computing single hash output for single input data. Even when
+   some implementation is specialized e.g. for vector instruction set
+   to speedup the computation, the dataflow of the algorithm limits
+   gains given by the vectorization.
+
+   In context of zcash we need to run the hash function 2^20-times. So
+   we can choose different vectorization strategy to explit this
+   fact. The basic idea is to use vector instructions to compute more
+   then one hash function at the same time. E.g. AVX2 instructions
+   operate on 4 64bit integer values at once so we can compute 4
+   hashes. A critical property is that all 4 hashes and input data are
+   independent so the computations needn't to share any data.
+
+   Other nice property is that a structure of the code is the same as
+   for basic scalar implementation. The only difference is that a
+   vector instruction computes with more data.
 
 #### Implementation details
 
