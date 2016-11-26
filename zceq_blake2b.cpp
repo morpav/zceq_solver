@@ -79,7 +79,7 @@ static inline YWord Broadcast64(u64 value) {
 template<u8 round, int shift>
 __attribute__((target("avx2")))
 __attribute__((always_inline))
-static inline void G_sequence(const YWord* messages, YWord v[16]) {
+static inline void G_sequence_AVX2(const YWord* messages, YWord* v) {
   const auto rotate16 = _mm256_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1,
                                          10, 11, 12, 13, 14, 15, 8, 9,
                                          2, 3, 4, 5, 6, 7, 0, 1,
@@ -276,30 +276,30 @@ inline void Compress4IntAVX2(const YWord msgs[2], const YWord state_init[8], YWo
   for (auto i : range(8))
     v[i + 8] = state_init[i];
 
-  G_sequence<0, 0>(msgs, v);
-  G_sequence<0, 4>(msgs, v);
-  G_sequence<1, 0>(msgs, v);
-  G_sequence<1, 4>(msgs, v);
-  G_sequence<2, 0>(msgs, v);
-  G_sequence<2, 4>(msgs, v);
-  G_sequence<3, 0>(msgs, v);
-  G_sequence<3, 4>(msgs, v);
-  G_sequence<4, 0>(msgs, v);
-  G_sequence<4, 4>(msgs, v);
-  G_sequence<5, 0>(msgs, v);
-  G_sequence<5, 4>(msgs, v);
-  G_sequence<6, 0>(msgs, v);
-  G_sequence<6, 4>(msgs, v);
-  G_sequence<7, 0>(msgs, v);
-  G_sequence<7, 4>(msgs, v);
-  G_sequence<8, 0>(msgs, v);
-  G_sequence<8, 4>(msgs, v);
-  G_sequence<9, 0>(msgs, v);
-  G_sequence<9, 4>(msgs, v);
-  G_sequence<10, 0>(msgs, v);
-  G_sequence<10, 4>(msgs, v);
-  G_sequence<11, 0>(msgs, v);
-  G_sequence<11, 4>(msgs, v);
+  G_sequence_AVX2<0, 0>(msgs, v);
+  G_sequence_AVX2<0, 4>(msgs, v);
+  G_sequence_AVX2<1, 0>(msgs, v);
+  G_sequence_AVX2<1, 4>(msgs, v);
+  G_sequence_AVX2<2, 0>(msgs, v);
+  G_sequence_AVX2<2, 4>(msgs, v);
+  G_sequence_AVX2<3, 0>(msgs, v);
+  G_sequence_AVX2<3, 4>(msgs, v);
+  G_sequence_AVX2<4, 0>(msgs, v);
+  G_sequence_AVX2<4, 4>(msgs, v);
+  G_sequence_AVX2<5, 0>(msgs, v);
+  G_sequence_AVX2<5, 4>(msgs, v);
+  G_sequence_AVX2<6, 0>(msgs, v);
+  G_sequence_AVX2<6, 4>(msgs, v);
+  G_sequence_AVX2<7, 0>(msgs, v);
+  G_sequence_AVX2<7, 4>(msgs, v);
+  G_sequence_AVX2<8, 0>(msgs, v);
+  G_sequence_AVX2<8, 4>(msgs, v);
+  G_sequence_AVX2<9, 0>(msgs, v);
+  G_sequence_AVX2<9, 4>(msgs, v);
+  G_sequence_AVX2<10, 0>(msgs, v);
+  G_sequence_AVX2<10, 4>(msgs, v);
+  G_sequence_AVX2<11, 0>(msgs, v);
+  G_sequence_AVX2<11, 4>(msgs, v);
 
   for (auto i : range(8))
     h[i] = h[i] ^ v[i] ^ v[i + 8];
