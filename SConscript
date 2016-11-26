@@ -7,15 +7,15 @@ lib_src = ['lib_main.cpp']
 lib_objs = env.SharedObject(env['COMMON_SRC'] +
                             lib_src)
 asm_objs = env.Glob('blake2b-asm/zcblake2_avx*.o')
-blake2_lib_objs = env.SharedObject(Glob('blake2/*.c'))
+blake2_lib_src = Glob('blake2/*.c')
+blake2_lib_objs = env.SharedObject(blake2_lib_src)
 
 shared_lib = env.SharedLibrary('zceqsolver', lib_objs + blake2_lib_objs + asm_objs)
 
 benchmark_src = ['benchmark.cpp']
-benchmark_objs = env.Object(benchmark_src)
+benchmark_objs = env.Object(benchmark_src + lib_src + blake2_lib_src + env['COMMON_SRC'])
 
-benchmark = env.Program('zceq_benchmark', benchmark_objs, LIBS=['zceqsolver'],
-                        LIBPATH='.')
+benchmark = env.Program('zceq_benchmark', benchmark_objs + asm_objs)
 if 'PROFILE_RAW_FILE' in env:
     profile_raw_file = env.Command('${PROFILE_RAW_FILE}', benchmark,
                                    action=SCons.Action.Action(
@@ -26,7 +26,7 @@ if 'PROFILE_RAW_FILE' in env:
 
                                              PROFILING run - please, do NOT stop the process.
                                                      This is SLOWER then normal run.
-                                             Alternatively, run make as "scons --no-profiling"
+                                           Alternatively, run the build as "scons --no-profiling"
 
                                        **********************************************************"""))
     # Unfortunately, on some distributions, llvm-profdata alias
