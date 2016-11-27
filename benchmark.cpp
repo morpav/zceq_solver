@@ -42,9 +42,6 @@ int main(const int argc, const char * const * argv) {
       "Requires AVX2 support for proper behaviour. When specified, other options instuction set options are ignored.", {"profiling"});
 
 
-  if (random)
-    std::srand((unsigned int)std::chrono::steady_clock::now().time_since_epoch().count());
-
   try {
     parser.ParseCLI(argc, argv);
   }
@@ -62,6 +59,9 @@ int main(const int argc, const char * const * argv) {
     std::cerr << parser;
     return 1;
   }
+
+  if (random)
+    std::srand((unsigned int)std::chrono::steady_clock::now().time_since_epoch().count());
 
   auto& batch = RunTimeConfig.kBatchBlakeAllowed;
   auto& scalar = RunTimeConfig.kScalarBlakeAllowed;
