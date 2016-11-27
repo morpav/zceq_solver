@@ -132,7 +132,7 @@ bool GetMinimalFromIndices(const u32* indices, u64 indices_length, u8* output, u
     return false;
   size_t cBitLen = 20;
   assert(((cBitLen+1)+7)/8 <= sizeof(u32));
-  size_t lenIndices { indices_length * sizeof(u32) };
+  size_t lenIndices { ((size_t)indices_length) * sizeof(u32) };
   size_t minLen { (cBitLen+1)*lenIndices/(8*sizeof(u32)) };
   size_t bytePad { sizeof(u32) - ((cBitLen+1)+7)/8 };
   std::vector<unsigned char> array(lenIndices);

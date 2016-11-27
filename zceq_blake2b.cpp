@@ -1,9 +1,13 @@
 /* Copyright @ 2016 Pavel Moravec */
-#include <cassert>
-#include <emmintrin.h>
-#include <tmmintrin.h>
-#include <smmintrin.h>
-#include <immintrin.h>
+#include "zceq_arch.h"
+
+#if IS_X86
+  #include <emmintrin.h>
+  #include <tmmintrin.h>
+  #include <smmintrin.h>
+  #include <immintrin.h>
+  #include <cassert>
+#endif
 
 #include "zceq_misc.h"
 #include "zceq_blake2b.h"
@@ -11,8 +15,10 @@
 
 namespace zceq_solver {
 
+#if IS_X86
 using YWord = __m256i;
 using XWord = __m128i;
+#endif
 
 static constexpr u8 sigma[12][16] =
 {
@@ -36,6 +42,7 @@ static constexpr u8 c[8] = { 8, 9,10,11,10,11, 8, 9};
 static constexpr u8 d[8] = {12,13,14,15,15,12,13,14};
 
 
+#if IS_X86
 __attribute__((target("avx2")))
 __attribute__((always_inline))
 static inline void AddMessageAVX2(YWord& output, YWord input, const YWord* messages,
@@ -46,7 +53,9 @@ static inline void AddMessageAVX2(YWord& output, YWord input, const YWord* messa
   else
     output = input;
 }
+#endif
 
+#if IS_X86
 __attribute__((target("avx")))
 __attribute__((always_inline))
 static inline void AddMessageAVX1(XWord& output, XWord input, const XWord* messages,
@@ -57,7 +66,10 @@ static inline void AddMessageAVX1(XWord& output, XWord input, const XWord* messa
   else
     output = input;
 }
+#endif
 
+
+#if IS_X86
 __attribute__((target("sse2")))
 __attribute__((always_inline))
 static inline void AddMessageSSE2(XWord& output, XWord input, const XWord* messages,
@@ -68,14 +80,18 @@ static inline void AddMessageSSE2(XWord& output, XWord input, const XWord* messa
   else
     output = input;
 }
+#endif
 
+#if IS_X86
 __attribute__((target("avx2")))
 __attribute__((always_inline))
 __attribute__((unused))
 static inline YWord Broadcast64(u64 value) {
   return _mm256_broadcastq_epi64(*(XWord*)&value);
 }
+#endif
 
+#if IS_X86
 template<u8 round, int shift>
 __attribute__((target("avx2")))
 __attribute__((always_inline))
@@ -124,7 +140,9 @@ static inline void G_sequence_AVX2(const YWord* messages, YWord* v) {
     v[b[i]] = _mm256_or_si256(_mm256_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
   }
 }
+#endif
 
+#if IS_X86
 template<u8 round, int shift>
 __attribute__((target("avx")))
 __attribute__((always_inline))
@@ -168,7 +186,9 @@ static inline void G_sequence_AVX1(const XWord* messages, XWord v[16]) {
     v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
   }
 }
+#endif
 
+#if IS_X86
 template<u8 round, int shift>
 __attribute__((target("ssse3")))
 __attribute__((always_inline))
@@ -212,7 +232,9 @@ static inline void G_sequence_SSSE3(const XWord* messages, XWord v[16]) {
     v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
   }
 }
+#endif
 
+#if IS_X86
 template<u8 round, int shift>
 // FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
 __attribute__((target("ssse3")))
@@ -257,6 +279,7 @@ static inline void G_sequence_SSE2(const XWord* messages, XWord v[16]) {
     v[b[i]] = _mm_xor_si128(_mm_srli_epi64(v[b[i]], 63), v[b[i]] + v[b[i]]);
   }
 }
+#endif
 
 alignas(64) static const uint64_t blake2b_IV[8] =
 {
@@ -266,6 +289,7 @@ alignas(64) static const uint64_t blake2b_IV[8] =
   0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
 };
 
+#if IS_X86
 __attribute__((target("avx2")))
 inline void Compress4IntAVX2(const YWord msgs[2], const YWord state_init[8], YWord h[8]) {
   YWord v[16];
@@ -304,7 +328,9 @@ inline void Compress4IntAVX2(const YWord msgs[2], const YWord state_init[8], YWo
   for (auto i : range(8))
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
+#endif
 
+#if IS_X86
 __attribute__((target("avx")))
 inline void Compress2IntAVX1(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
   XWord v[16];
@@ -343,7 +369,9 @@ inline void Compress2IntAVX1(const XWord msgs[2], const XWord state_init[8], XWo
   for (auto i : range(8))
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
+#endif
 
+#if IS_X86
 __attribute__((target("ssse3")))
 inline void Compress2IntSSSE3(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
   XWord v[16];
@@ -382,7 +410,10 @@ inline void Compress2IntSSSE3(const XWord msgs[2], const XWord state_init[8], XW
   for (auto i : range(8))
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
+#endif
 
+
+#if IS_X86
 // FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
 __attribute__((target("ssse3")))
 inline void Compress2IntSSE2(const XWord msgs[2], const XWord state_init[8], XWord h[8]) {
@@ -422,6 +453,7 @@ inline void Compress2IntSSE2(const XWord msgs[2], const XWord state_init[8], XWo
   for (auto i : range(8))
     h[i] = h[i] ^ v[i] ^ v[i + 8];
 }
+#endif
 
 template<u8 batch_size>
 void IntrinsicsBackend<batch_size>::Precompute(const u8* header_and_nonce, u64 length,
@@ -455,6 +487,8 @@ void IntrinsicsBackend<batch_size>::Precompute(const u8* header_and_nonce, u64 l
   }
 }
 
+
+#if IS_X86
 __attribute__((target("avx2")))
 void IntrinsicsAVX2::Finalize(u32 g_start) {
   // Fill g indices into the vectorized (transposed) block parts.
@@ -471,7 +505,9 @@ void IntrinsicsAVX2::Finalize(u32 g_start) {
     for (auto part : range(7))
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
+#endif
 
+#if IS_X86
 __attribute__((target("avx")))
 void IntrinsicsAVX1::Finalize(u32 g_start) {
   // Fill g indices into the vectorized (transposed) block parts.
@@ -488,7 +524,9 @@ void IntrinsicsAVX1::Finalize(u32 g_start) {
     for (auto part : range(7))
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
+#endif
 
+#if IS_X86
 __attribute__((target("ssse3")))
 void IntrinsicsSSSE3::Finalize(u32 g_start) {
   // Fill g indices into the vectorized (transposed) block parts.
@@ -505,7 +543,9 @@ void IntrinsicsSSSE3::Finalize(u32 g_start) {
     for (auto part : range(7))
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
+#endif
 
+#if IS_X86
 // FIXME: Temporarily changed sse2 to ssse3 before finding proper solutions for sse2.
 __attribute__((target("ssse3")))
 void IntrinsicsSSE2::Finalize(u32 g_start) {
@@ -525,6 +565,6 @@ void IntrinsicsSSE2::Finalize(u32 g_start) {
     for (auto part : range(7))
       hash_output_[vec][part] = (*hash_out_vectors_)[part][vec];
 }
-
+#endif
 
 }  // namespace zceq_solver

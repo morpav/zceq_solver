@@ -1,3 +1,5 @@
+#include "../zceq_arch.h"
+#if IS_X86
 
 #define BLAKE2_USE_SSSE3
 #define BLAKE2_USE_SSE41
@@ -38,3 +40,5 @@ int blake2b_compress_avx2( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBY
 
     return 0;
 }
+
+#endif // IS_X86

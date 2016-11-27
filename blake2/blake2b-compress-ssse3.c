@@ -1,3 +1,5 @@
+#include "../zceq_arch.h"
+#if IS_X86
 
 #include <stdint.h>
 #include <string.h>
@@ -80,3 +82,5 @@ int blake2b_compress_ssse3( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKB
   STOREU( &S->h[6], _mm_xor_si128( LOADU( &S->h[6] ), row2h ) );
   return 0;
 }
+
+#endif // IS_X86

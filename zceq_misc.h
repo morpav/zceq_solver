@@ -6,11 +6,19 @@
 #include <cstring>
 #include <chrono>
 #include <functional>
-#include <cpuid.h>
-#include <x86intrin.h>
+
+#include "zceq_arch.h"
+
+#if IS_X86
+    #include <cpuid.h>
+    #include <x86intrin.h>
+#elif IS_ARM_NEON
+    #include <arm_neon.h>
+#endif
 
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+
 
 void __attribute__((weak)) AsmMarker() {}
 
@@ -202,10 +210,11 @@ class Random {
 
 
 template<u64 length>
-static inline void memcpy_nt(void* __restrict dest,
-                             const void* __restrict source) {
+inline void memcpy_nt(void* __restrict dest,
+                      const void* __restrict source) {
   static_assert(length % 4 == 0, "Cannot copy objects not aligned to 4B.");
 
+#if IS_X86
   for (auto part = 0; part < (length / 16); ++part) {
     _mm_stream_si128(((__m128i *)dest) + part,
                      *(((__m128i *)source) + part));
@@ -213,23 +222,45 @@ static inline void memcpy_nt(void* __restrict dest,
   if (length % 16 > 0) {
     int part = (length / 16 * 16) / 8;
     _mm_stream_si64(
-        reinterpret_cast<long long int*>(dest) + part,
-        *(reinterpret_cast<const long long int*>(source) + part));
+        reinterpret_cast<int64_t*>(dest) + part,
+        *(reinterpret_cast<const int64_t*>(source) + part));
   }
   if (length % 8 > 0) {
     int part = (length / 8 * 8) / 4;
     _mm_stream_si32(
-        reinterpret_cast<int*>(dest) + part,
-        *(reinterpret_cast<const int*>(source) + part));
+        reinterpret_cast<int32_t*>(dest) + part,
+        *(reinterpret_cast<const int32_t*>(source) + part));
   }
+#elif IS_ARM_NEON
+/*
+  for (auto part = 0; part < (length / 16); ++part) {
+   auto val = vld1q_s8((((int8_t *) source) + part));
+   vst1q_s8(((int8_t *) dest) + part, val);
+  }
+  if (length % 16 > 0) {
+    int part = (length / 16 * 16) / 8;
+
+    auto val = vld1_s64(((const int64_t *) source) + part);
+    vst1_s64(((int64_t *) dest) + part, val);
+  }
+  if (length % 8 > 0) {
+    int part = (length / 8 * 8) / 4;
+
+    auto val = vld1_s32(((const int32_t *) source) + part);
+    vst1_s32(((int32_t *) dest) + part, val);
+  }
+  */
+  memcpy(dest, source, length);
+#endif
 }
 
 template<u64 length>
-static inline void memcpy_t(void* __restrict dest,
-                            const void* __restrict source) {
+inline void memcpy_t(void* __restrict dest,
+                     const void* __restrict source) {
   memcpy(dest, source, length);
 }
 
+#if IS_X86
 struct CPUInfo {
   int eax;
   int ebx;
@@ -250,35 +281,72 @@ static inline void cpuid(CPUInfo& info, CPUIDFunction function) {
   info.ecx = c;
   info.edx = d;
 }
+#endif
+
+static inline bool HasNeon64Support() {
+#if IS_ARM_NEON
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+static inline bool HasNeon32Support() {
+#if IS_ARM_NEON
+  return 1;
+#else
+  return 0;
+#endif
+}
 
 static inline bool HasAvx2Support() {
+#if IS_X86
   CPUInfo info;
   cpuid(info, CPUIDFunction::ExtendedFeatures);
   return (info.ebx & 0x20) != 0;
+#else
+  return 0;
+#endif
 }
 
 static inline bool HasAvx1Support() {
+#if IS_X86
   CPUInfo info;
   cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x10000000) != 0;
+#else
+  return 0;
+#endif
 }
 
 static inline bool HasSSE41Support() {
+#if IS_X86
   CPUInfo info;
   cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x80000) != 0;
+#else
+  return 0;
+#endif
 }
 
 static inline bool HasSSSE3Support() {
+#if IS_X86
   CPUInfo info;
   cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.ecx & 0x200) != 0;
+#else
+  return 0;
+#endif
 }
 
 static inline bool HasSSE2Support() {
+#if IS_X86
   CPUInfo info;
   cpuid(info, CPUIDFunction::ProcInfoAndFeatures);
   return (info.edx & 0x4000000) != 0;
+#else
+  return 0;
+#endif
 }
 
 

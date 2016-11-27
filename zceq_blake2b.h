@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cassert>
 
+#include "zceq_arch.h"
 #include "zceq_config.h"
 #include "zceq_misc.h"
 
@@ -241,6 +242,8 @@ class IntrinsicsBackend : public BlakeBatchBackend {
   Vectors8xN* hash_out_vectors_ = nullptr;
 };
 
+
+#if IS_X86
 class IntrinsicsAVX2 : public IntrinsicsBackend<4> {
   virtual void Finalize(u32 g_start);
 };
@@ -256,7 +259,9 @@ class IntrinsicsSSSE3 : public IntrinsicsBackend<2> {
 class IntrinsicsSSE2 : public IntrinsicsBackend<2> {
   virtual void Finalize(u32 g_start);
 };
+#endif
 
+#if IS_X86
 class AsmAVX2 : public BlakeBatchBackend {
  public:
   AsmAVX2() {
@@ -310,12 +315,14 @@ class AsmAVX1 : public BlakeBatchBackend {
   void* prepared_state_ = nullptr;
   BatchHash* hash_output_ = nullptr;
 };
+#endif
 
 inline Blake2b::Blake2b() {
   // Pick best implementation for scalar blake2b, based on allowed
   // instruction sets and actual CPU.
   {
     auto& allowed = RunTimeConfig.kScalarBlakeAllowed;
+#if IS_X86
     if (allowed.AVX2 && HasAvx2Support())
       blake2b_compress = blake2b_compress_avx2;
     else if (allowed.SSE41 && HasSSE41Support())
@@ -324,6 +331,16 @@ inline Blake2b::Blake2b() {
       blake2b_compress = blake2b_compress_ssse3;
     else
       blake2b_compress = blake2b_compress_ref;
+#elif IS_ARM_NEON
+    if (allowed.NEON64 && HasNeon64Support())
+      blake2b_compress = blake2b_compress_neon64;
+    else if (allowed.NEON32 && HasNeon32Support())
+      blake2b_compress = blake2b_compress_ref;
+    else
+      blake2b_compress = blake2b_compress_ref;
+#else
+    blake2b_compress = blake2b_compress_ref;
+#endif
   }
 
   // Don't use batch implementation (mostly useful for profiling only).
@@ -334,6 +351,7 @@ inline Blake2b::Blake2b() {
 
   // Pick best implementation for batch blake2b.
   {
+#if IS_X86
     auto& allowed = RunTimeConfig.kBatchBlakeAllowed;
     // AVX2
     if (allowed.AVX2 && HasAvx2Support()) {
@@ -354,7 +372,11 @@ inline Blake2b::Blake2b() {
       batch_backend_ = new IntrinsicsSSE2();
     } else
       batch_backend_ = nullptr;
+#else
+    batch_backend_ = nullptr;
+#endif
   }
+  
 }
 
 inline Blake2b::~Blake2b() {
