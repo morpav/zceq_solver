@@ -81,7 +81,7 @@ class BlakeBatchBackend {
 class alignas(32) Blake2b {
  public:
   inline Blake2b();
-  ~Blake2b() {}
+  inline ~Blake2b();
 
   void Precompute(const u8* header_and_nonce, u64 length) {
     if (length != 140) {
@@ -355,6 +355,10 @@ inline Blake2b::Blake2b() {
     } else
       batch_backend_ = nullptr;
   }
+}
+
+inline Blake2b::~Blake2b() {
+  delete batch_backend_;
 }
 
 }  // namespace zceq_solver

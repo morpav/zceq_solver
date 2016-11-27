@@ -139,9 +139,9 @@ void SpaceAllocator::Reset() {
     if (space->IsUsed())
       space->Release();
   }
+  space_objs_buffer_.clear();
   std::copy(all_spaces_.begin(), all_spaces_.end(),
             std::back_inserter(space_objs_buffer_));
-  all_spaces_.clear();
   for (auto& slot : slot_states_)
     slot = nullptr;
 }
