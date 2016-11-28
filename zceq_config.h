@@ -150,7 +150,7 @@ namespace Const {
   static constexpr u64 kExtraSpaceDivisor = 5;
   // Number of bits used for encoding a bucket. Directly defines number
   // of buckets used by the solver.
-  static constexpr u64 kBucketCountBits = 8;
+  static constexpr u64 kBucketCountBits = 9;
   // Number of bits from string's first segment not stored in the strings.
   // The bits are fully dependent on the string's position in some
   // particular bucket so they are redundant. Currently the code support
@@ -163,7 +163,7 @@ namespace Const {
   // identification. Not necessarily all bucket bits can be stored
   // into the pair link index (the rest are computed on-the-fly from
   // the link object position).
-  static constexpr u32 kBucketInIndexShift = 26;
+  static constexpr u32 kBucketInIndexShift = 24;
   // When a collision groups size is equal or greater then this value
   // the group is eliminated as a whole before producing any output
   // strings. This value is derived from a collision group size
