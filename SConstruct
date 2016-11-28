@@ -112,7 +112,7 @@ if not GetOption('enable_win_cross_build') and GetOption('enable_profiling'):
                              variant_dir=profiling_env['VARIANT_DIR'],
                              duplicate=0)
     # Adjust the final build environment with profile data and signal
-    final_env.Append(LINKFLAGS=[use_profile_data_flags],
+    final_env.Append(LINKFLAGS=[use_profile_data_flags, '-static', '-Wl,--no-export-dynamic'],
                      CXXFLAGS=[use_profile_data_flags],
                      PROFILE_DATA_FILE=profiling_env['PROFILE_DATA_FILE'],
                      ADD_PROFILE_DATA_DEPS=True)

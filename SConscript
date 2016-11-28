@@ -15,7 +15,7 @@ shared_lib = env.SharedLibrary('zceqsolver', lib_objs + blake2_lib_objs + asm_ob
 benchmark_src = ['benchmark.cpp']
 benchmark_objs = env.Object(benchmark_src + lib_src + blake2_lib_src + env['COMMON_SRC'])
 
-benchmark = env.Program('zceq_benchmark', benchmark_objs + asm_objs, LINKFLAGS='-static -Wl,--no-export-dynamic')
+benchmark = env.Program('zceq_benchmark', benchmark_objs + asm_objs)
 if 'PROFILE_RAW_FILE' in env:
     profile_raw_file = env.Command('${PROFILE_RAW_FILE}', benchmark,
                                    action=SCons.Action.Action(
