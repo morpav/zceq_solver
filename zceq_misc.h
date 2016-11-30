@@ -238,6 +238,7 @@ struct CPUInfo {
 };
 
 enum class CPUIDFunction : int {
+  HasExtendedFeaturesLeaf = 0x00,
   ProcInfoAndFeatures = 0x01,
   ExtendedFeatures = 0x07,
 };
@@ -253,6 +254,10 @@ static inline void cpuid(CPUInfo& info, CPUIDFunction function) {
 
 static inline bool HasAvx2Support() {
   CPUInfo info;
+  cpuid(info, CPUIDFunction::HasExtendedFeaturesLeaf);
+  if (info.eax < (int)CPUIDFunction::ExtendedFeatures)
+    return false;
+
   cpuid(info, CPUIDFunction::ExtendedFeatures);
   return (info.ebx & 0x20) != 0;
 }
