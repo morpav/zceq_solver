@@ -4,7 +4,6 @@
 #include <chrono>
 
 #include "zceq_solver.h"
-#include "zceq_blake2b.h"
 
 namespace zceq_solver {
 
@@ -1026,6 +1025,8 @@ static inline u64 now() {
 }
 
 void Solver::ResetTimer() {
+  if (!Const::kReportSteps)
+    return;
   timer_start_ = major_start_ = last_report_ = now();
 }
 

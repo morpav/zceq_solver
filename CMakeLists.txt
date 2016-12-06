@@ -25,6 +25,7 @@ set(ZCEQ_SOLVER_SOURCES_COMMON
         blake2/blake2b-compress-ssse3.c
         blake2b-asm/zcblake2_avx1.o
         blake2b-asm/zcblake2_avx2.o
+        libc_compatibility.c
 )
 
 set_source_files_properties(

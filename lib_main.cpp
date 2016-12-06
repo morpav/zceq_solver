@@ -36,7 +36,6 @@ int FindSolutions(ZcEquihashSolver* solver, HeaderAndNonce* inputs,
   auto& s = solver->solver;
 
   s.Reset((const u8*)inputs->data, sizeof Inputs::data);
-  ScopeTimer t;
   auto solution_count = s.Run();
   auto sol_vector = s.GetSolutions();
   if (solution_count > 0) {
@@ -103,43 +102,4 @@ int SolverFunction(const unsigned char* input,
   }
   return solution_count;
 }
-
-
-void RunBenchmark(long long nonce_start, int iterations) {
-  Inputs inputs;
-  memset(inputs.data, 'Z', sizeof(inputs.data));
-
-  Solver solver;
-  solver.Reset(inputs);
-  printf("Warming up... ");
-  fflush(stdout);
-  solver.Run();
-  printf("done\n");
-
-  ScopeTimer gt;
-  auto total_solutions = 0;
-  for (auto iter : range(iterations)) {
-    ScopeTimer t;
-    inputs.SetSimpleNonce(nonce_start + iter);
-    solver.Reset(inputs);
-    auto solutions = solver.Run();
-    printf("%2d solutions in %" PRId64 "ms\n", solutions, t.Micro() / 1000);
-    total_solutions += solutions;
-    if ((iter + 1) % 10 == 0) {
-      auto iters_done = iter + 1;
-      printf("(%d iters, %2d sols, %.4G sol/iter, %.4G sol/s, %.5G s/iter)\n",
-             iters_done, total_solutions,
-          // gt.Micro() / 1000,
-             total_solutions / double(iters_done),
-             (total_solutions * 1000000ll) / double(gt.Micro()),
-             double(gt.Micro()) / (iters_done * 1000000ll)
-      );
-      fflush(stdout);
-    }
-  }
-  solver.Reset(inputs);
-  printf("*******************************\n");
-  printf("Total %d solutions in %" PRId64 " ms\n", total_solutions, gt.Micro() / 1000);
-}
-
 }

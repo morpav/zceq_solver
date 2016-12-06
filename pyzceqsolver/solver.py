@@ -30,8 +30,6 @@ int FindSolutions(ZcEquihashSolver* solver, HeaderAndNonce* inputs,
 
 int ValidateSolution(ZcEquihashSolver* solver, HeaderAndNonce* inputs, Solution* solutions);
 
-void RunBenchmark(long long nonce_start, int iterations);
-
 bool ExpandedToMinimal(Solution* minimal, ExpandedSolution* expanded);
 
 bool MinimalToExpanded(ExpandedSolution* expanded, Solution* minimal);
@@ -80,9 +78,6 @@ class Solver:
         # Try to load library from standard
         if (library is None):
             load_library()
-
-    def run_benchmark(self, iterations=10, nonce_start=0):
-        library.RunBenchmark(nonce_start, iterations)
 
     def find_solutions(self, block_header):
         assert len(block_header) == 140
