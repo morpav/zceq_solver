@@ -32,6 +32,11 @@ AddOption('--no-profiling',
           action='store_false',
           default=True,
           help="Disable code profiling and don't build with profiler data (default: Enabled)")
+AddOption('--wrap-memcpy',
+          dest='wrap_memcpy',
+          action='store_true',
+          default=False,
+          help="Tell the linker to wrap calls to memcpy (for replacing it by legacy version)")
 AddOption('--march',
           dest='march',
           type='string',
@@ -105,10 +110,12 @@ profiling_env.Append(CPPDEFINES=[],
                      PROFILE_DATA_FILE=profile_data_file)
 
 
+
 # Run profiler for native builds only
 if not GetOption('enable_win_cross_build') and GetOption('enable_profiling'):
     profiling_env.SConscript('SConscript',
-                             exports={'env': profiling_env},
+                             exports={'env': profiling_env,
+                                      'lib_env': profiling_env},
                              variant_dir=profiling_env['VARIANT_DIR'],
                              duplicate=0)
     # Adjust the final build environment with profile data and signal
@@ -116,7 +123,14 @@ if not GetOption('enable_win_cross_build') and GetOption('enable_profiling'):
                      CXXFLAGS=[use_profile_data_flags],
                      PROFILE_DATA_FILE=profiling_env['PROFILE_DATA_FILE'],
                      ADD_PROFILE_DATA_DEPS=True)
-    
-final_env.SConscript('SConscript', exports={'env': final_env}, 
+
+lib_final_env = final_env.Clone()
+# Optionally, append compatibility when linking the shared library
+if not GetOption('enable_win_cross_build') and GetOption('wrap_memcpy'):
+    lib_final_env.Append(LINKFLAGS=['-Wl,--wrap=memcpy'],
+                         COMMON_SRC=['libc_compatibility.c'])
+
+final_env.SConscript('SConscript', exports={'env': final_env,
+                                            'lib_env': lib_final_env},
                      variant_dir=final_env['VARIANT_DIR'],
                      duplicate=0)
