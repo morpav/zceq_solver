@@ -89,7 +89,7 @@ if GetOption('enable_win_cross_build'):
 final_env.Replace(**env_replace_options)
 final_env.Append(**env_append_options)
 
-final_env.Append(COMMON_SRC=['zceq_solver.cpp', 
+final_env.Append(COMMON_SRC=['zceq_solver.cpp',
                              'zceq_blake2b.cpp',
                              'zceq_space_allocator.cpp'])
 
