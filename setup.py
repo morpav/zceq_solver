@@ -15,6 +15,10 @@ import sys
 import platform
 
 from distutils.command.build import build
+from setuptools.command.install import install
+from setuptools.command.develop import develop
+
+scons_run_already = False
 
 def get_target_system_shared_library_name():
      """Helper function that scans command line arguments whether platform
@@ -40,6 +44,12 @@ def get_target_system_shared_library_name():
      return pyzceqsolver.get_library_filename(target_system_name)
 
 class MyDist(Distribution):
+     """Override distribution - indicate presence of ext modules.
+
+     Since the backend library is being built by scons, we cannot use
+     the 'ext' modules functionality. However, we always want the
+     binary package to have a platform specific suffix.
+     """
      def has_ext_modules(self):
          return True
 
@@ -55,25 +65,33 @@ def sconsbuild(command_subclass):
 
     command_subclass.user_options.extend([
          ('scons-opts=', 's', 'SCons options'),
+         ('no-scons-build', 'n', 'Disable scons build')
     ])
 
     def modified_initialize_options(self):
-         self.scons_opts=[]
+         self.scons_opts=''
+         self.no_scons_build = False
          orig_initialize_options(self)
 
     def modified_finalize_options(self):
          orig_finalize_options(self)
 
     def modified_run(self):
+         global scons_run_already
          scons_opts_list = [s.strip() for s in self.scons_opts.split(',')]
          command = ['scons']
          command.extend(scons_opts_list)
          command.append('pyinstall')
 
-         self.announce('Building zceq solver C library (scons options: {})'.format(
-              scons_opts_list), distutils.log.INFO)
          try:
-              subprocess.check_call(command)
+              if self.no_scons_build:
+                   scons_run_already = True
+              if not scons_run_already:
+                   self.announce('Building zceq solver C library ' \
+                                 '(scons options: {})'.format(
+                                      scons_opts_list), distutils.log.INFO)
+                   subprocess.check_call(command)
+                   scons_run_already = True
          except subprocess.CalledProcessError as e:
               self.announce('SCons build failed (command: {0}, {1})'.format(
                    ' '.join(command), command), distutils.log.ERROR)
@@ -88,8 +106,20 @@ def sconsbuild(command_subclass):
     return command_subclass
 
 
+# Override the following commands to cover all scenarios when the
+# package is being built/installed so that the build of the C backend
+# is always triggered at most once. A drawback is that all 3 commands
+# now accept the '--scons-opts' option
 @sconsbuild
 class BuildCommand(build):
+     pass
+
+@sconsbuild
+class DevelopCommand(develop):
+     pass
+
+@sconsbuild
+class InstallCommand(install):
      pass
 
 # Get the long description from the README file
@@ -115,7 +145,8 @@ setup(
      url='https://github.com/slushpool/zceq-solver',
 
      # Author details
-     author='Slushpool',
+     author='Jan Čapek',
+     author_email='jan.capek@braiins.cz',
 
      # Choose your license
      license='MIT',
@@ -163,6 +194,8 @@ setup(
      },
      cmdclass={
           'build': BuildCommand,
+          'install': InstallCommand,
+          'develop': DevelopCommand,
      },
      distclass = MyDist,
 )
