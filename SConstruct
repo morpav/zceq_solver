@@ -119,12 +119,16 @@ if not GetOption('enable_win_cross_build') and GetOption('enable_profiling'):
                              variant_dir=profiling_env['VARIANT_DIR'],
                              duplicate=0)
     # Adjust the final build environment with profile data and signal
-    final_env.Append(LINKFLAGS=[use_profile_data_flags, '-static', '-Wl,--no-export-dynamic'],
+    final_env.Append(LINKFLAGS=[use_profile_data_flags],
                      CXXFLAGS=[use_profile_data_flags],
                      PROFILE_DATA_FILE=profiling_env['PROFILE_DATA_FILE'],
                      ADD_PROFILE_DATA_DEPS=True)
 
 lib_final_env = final_env.Clone()
+# Set static build only for the benchmark - that's why we append it
+# after cloning the final shared library environment
+final_env.Append(LINKFLAGS=['-static', '-Wl,--no-export-dynamic'])
+
 # Optionally, append compatibility when linking the shared library
 if not GetOption('enable_win_cross_build') and GetOption('wrap_memcpy'):
     lib_final_env.Append(LINKFLAGS=['-Wl,--wrap=memcpy'],
