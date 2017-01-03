@@ -4,15 +4,9 @@ import subprocess
 Import('env')
 Import('lib_env')
 
-lib_src = ['lib_main.cpp']
-lib_objs = lib_env.SharedObject(lib_env['COMMON_SRC'] +
-                                lib_src)
 asm_objs = env.Glob('blake2b-asm/zcblake2_avx*.o')
 
 blake2_src = Glob('blake2/*.c')
-blake2_lib_objs = lib_env.SharedObject(blake2_src)
-
-shared_lib = lib_env.SharedLibrary('zceqsolver', lib_objs + blake2_lib_objs + asm_objs)
 
 benchmark_src = ['benchmark.cpp']
 benchmark_objs = env.Object(benchmark_src + blake2_src + env['COMMON_SRC'])
@@ -42,6 +36,11 @@ if 'PROFILE_RAW_FILE' in env:
                                    ))
     env['PROFILE_DATA_FILE'] = profile_data_file[0]
 else:
+    lib_src = ['lib_main.cpp']
+    lib_objs = lib_env.SharedObject(lib_env['COMMON_SRC'] +
+                                    lib_src)
+    blake2_lib_objs = lib_env.SharedObject(blake2_src)
+    shared_lib = lib_env.SharedLibrary('zceqsolver', lib_objs + blake2_lib_objs + asm_objs)
     # Extend dependencies if profiler data is needed
     if 'ADD_PROFILE_DATA_DEPS' in env:
         lib_env.Depends(benchmark_objs + lib_objs, env['PROFILE_DATA_FILE'])
