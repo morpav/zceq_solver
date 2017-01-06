@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
         clang-3.9 \
         mingw-w64 \
         scons \
+	virtualenv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 999 \
