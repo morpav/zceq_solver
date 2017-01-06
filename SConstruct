@@ -96,7 +96,12 @@ final_env.Append(COMMON_SRC=['zceq_solver.cpp',
 profiling_env = final_env.Clone()
 # make variant dirs part of the environments
 profiling_env.Append(VARIANT_DIR='build-profiling')
-final_env.Append(VARIANT_DIR='build-final')
+
+# Run profiler for native builds only
+if GetOption('enable_win_cross_build'):
+    final_env.Append(VARIANT_DIR='build-win')
+else:
+    final_env.Append(VARIANT_DIR='build-native')
 
 profile_raw_file = 'code.profraw'
 profile_data_file = 'code.profdata'
