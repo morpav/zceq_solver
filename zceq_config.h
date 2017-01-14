@@ -2,6 +2,7 @@
 #ifndef ZCEQ_CONFIG_H_
 #define ZCEQ_CONFIG_H_
 
+#include "zceq_arch.h"
 #include "zceq_misc.h"
 
 namespace zceq_solver {
@@ -12,12 +13,13 @@ namespace zceq_solver {
 // the solver to use different code paths for profile guided compiler
 // optimizations in scenario of binary build distribution.
 struct InstructionSet {
-  bool AVX2 = true;
-  bool AVX1 = true;
-  bool SSE41 = true;
-  bool SSSE3 = true;
-  // Temporarily disabled as not proper SSE2 batch implementation exists.
-  bool SSE2 = false;
+  bool NEON64 = IS_ARM_NEON;
+  bool NEON32 = IS_ARM_NEON;
+  bool AVX2 = IS_X86;
+  bool AVX1 = IS_X86;
+  bool SSE41 = IS_X86;
+  bool SSSE3 = IS_X86;
+  bool SSE2 = IS_X86;
 };
 
 // Configuration structure which can be altered during run-time.
@@ -29,7 +31,11 @@ struct RTConfig {
   InstructionSet kScalarBlakeAllowed;
   // Turn off to force the solver to use scalar blake2b
   // implementations.
+#if IS_X86
   bool kAllowBlake2bInBatches = true;
+#else
+  bool kAllowBlake2bInBatches = false;
+#endif
   // Turn off to force the solver to use intrinsics-based blake2b
   // implementations.
   bool kUseAsmBlake2b = true;

@@ -21,8 +21,6 @@
 // #include "runtime.h"
 #include "common.h"
 
-#include <cpuid.h>
-
 #ifdef HAVE_TI_MODE
 # if defined(__SIZEOF_INT128__)
 typedef unsigned __int128 uint128_t;

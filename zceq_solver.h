@@ -7,13 +7,15 @@
 #include <vector>
 #include <cstring>
 
+#include "zceq_arch.h"
 #include "zceq_config.h"
 #include "zceq_blake2b.h"
 #include "zceq_misc.h"
 #include "zceq_space_allocator.h"
 
-
-#include "x86intrin.h"
+#if IS_X86
+    #include "x86intrin.h"
+#endif
 
 
 namespace zceq_solver {
@@ -56,7 +58,7 @@ class PairLink {
   }
   inline void copy_nt(PairLink value) {
     static_assert(sizeof(i32) == sizeof *this, "Different size of pair link used for nt-store");
-    _mm_stream_si32((int*)this, value.data_);
+    memcpy_nt<8>((void *) this, (void *) &value.data_);
   }
   inline Translated Translate(u64 link_position) {
     auto indices = data_ & ((1u << Const::kBucketInIndexShift) - 1);
